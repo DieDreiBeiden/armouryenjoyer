@@ -1,0 +1,16 @@
+# Spieldaten und Exporte
+data/*
+!data/.gitkeep
+!data/README.md
+*.data
+*.mo
+*.wowsreplay
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Web
+node_modules/
+web/dist/

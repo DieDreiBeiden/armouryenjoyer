@@ -32,3 +32,21 @@ test("Texte: Deutsch und Englisch haben dieselben Schlüssel und Platzhalter, je
     .concat([...html.matchAll(/data-i18n-attr="([^"]+)"/g)].flatMap((m) => m[1].split(";").map((p) => p.split(":")[1].trim())));
   assert.deepEqual([...new Set(keys)].filter((k) => !(k in I.de)), []);
 });
+
+test("GameParams-Daten: Testschiffe ohne Werte, alle anderen mit Lebenspunkten", () => {
+  assert.equal(DATA.source, "GameParams");
+  const tests = DATA.ships.filter((s) => s.test);
+  assert.ok(tests.length > 0);
+  for (const s of tests) assert.ok(Object.values(s.p).every((x) => x === null), `${s.name} hat Werte`);
+  const noHp = DATA.ships.filter((s) => !s.test && !(s.p.hp > 0)).map((s) => s.name);
+  assert.deepEqual(noHp, []);
+});
+
+test("GameParams-Daten gegen die WG-Enzyklopädie: gleiche Schiffe, Top-Konfiguration nie schwächer als Standard", () => {
+  const ref = JSON.parse(fs.readFileSync(root + "data/api-reference.json", "utf8"));
+  const ids = new Set(DATA.ships.map((s) => s.id));
+  assert.deepEqual(ref.ships.filter((s) => !ids.has(s.id)).map((s) => s.name), []);
+  const byId = new Map(DATA.ships.map((s) => [s.id, s]));
+  const weaker = ref.ships.filter((r) => r.p.hp && byId.get(r.id).p.hp && byId.get(r.id).p.hp < r.p.hp).map((r) => r.name);
+  assert.deepEqual(weaker, []);
+});

@@ -18,12 +18,12 @@ Nur Python-Standardbibliothek, Python >= 3.8.
 import argparse
 import copyreg
 import csv
-import gettext
 import io
 import json
 import math
 import pickle
 import re
+import struct
 import sys
 import zlib
 from collections import Counter, OrderedDict, defaultdict
@@ -242,12 +242,31 @@ class GameParams:
             yield name, raw
 
 
+def read_mo(data):
+    """.mo-Katalog lesen. Die global.mo des Clients ist UTF-8, nennt aber keinen Zeichensatz;
+    gettext.GNUTranslations nimmt dann ASCII an und bricht ab."""
+    if len(data) < 28:
+        raise ValueError("keine .mo-Datei")
+    magic = struct.unpack("<I", data[:4])[0]
+    order = "<" if magic == 0x950412DE else ">" if magic == 0xDE120495 else None
+    if order is None:
+        raise ValueError("keine .mo-Datei (Magic)")
+    _rev, count, orig_off, trans_off = struct.unpack(order + "4I", data[4:20])
+    catalog = {}
+    for i in range(count):
+        olen, opos = struct.unpack(order + "2I", data[orig_off + 8 * i:orig_off + 8 * i + 8])
+        tlen, tpos = struct.unpack(order + "2I", data[trans_off + 8 * i:trans_off + 8 * i + 8])
+        key = data[opos:opos + olen].decode("utf-8", "replace")
+        catalog[key] = data[tpos:tpos + tlen].decode("utf-8", "replace")
+    return catalog
+
+
 class Localization:
     """Anzeigenamen aus res/texts/<sprache>/LC_MESSAGES/global.mo."""
 
     def __init__(self, mo_path):
         with open(mo_path, "rb") as f:
-            self._catalog = gettext.GNUTranslations(f)._catalog
+            self._catalog = read_mo(f.read())
 
     def get(self, key):
         v = self._catalog.get(key)
@@ -271,9 +290,20 @@ PROJECTILE_KEYS = ("ammoType", "alphaDamage", "damage", "bulletDiametr", "bullet
                    "visibilityFactor", "uwCritical", "armingTime")
 
 
+COMPONENT = {"Hull": "hull", "Artillery": "artillery", "ATBA": "atba", "Torpedoes": "torpedoes"}
+
+
 def _module_keys(raw, suffix):
+    """Module eines Typs. Echte Daten benennen sie frei (z. B. AB_127_50, A1_610); maßgeblich ist
+    ShipUpgradeInfo.components. Das Namensmuster A_Hull/B_Artillery bleibt als Rückfall."""
     a = _attrs(raw) or {}
-    return sorted(k for k in a if re.fullmatch(r"[A-Z]\d*_" + suffix, str(k)))
+    keys = {k for k in a if re.fullmatch(r"[A-Z]\d*_" + suffix, str(k))}
+    for up in (_attrs(_get(raw, "ShipUpgradeInfo")) or {}).values():
+        comps = to_plain(_get(up, "components")) if _attrs(up) is not None else None
+        for name in (comps or {}).get(COMPONENT.get(suffix), []) or []:
+            if name in a:
+                keys.add(name)
+    return sorted(keys)
 
 
 def _pick(o, keys):

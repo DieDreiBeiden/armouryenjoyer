@@ -7,7 +7,7 @@
 | 2 | Normalisiertes Datenmodell (alle Module, Top-Konfiguration, Lokalisierung), Patch-Diffs pro Build | 1–2 Wochen | Alternative Module nicht sauber abbildbar → Modell erweitern statt Sonderfälle |
 | 3 | `web/`: Tabelle, Vergleich 2–4 Schiffe, Patch-Historie | 2 Wochen | — |
 
-**Stand 31.10.2026:** `web/` ist vorgezogen und läuft mit Daten aus der Wargaming-API (Techbaum, Forschungskosten, Vergleich bis 6 Schiffe). Entscheidung: kein Vite/React, sondern dieselbe build-freie Bauweise wie der Santa-Rechner. Offen für Phase 3: Patch-Historie und Daten aus `GameParams.data` statt API.
+**Stand 31.10.2026:** `web/` ist vorgezogen und läuft mit Daten aus der Wargaming-API (Techbaum, Forschungskosten, Vergleich bis 6 Schiffe). Entscheidung: kein Vite/React, sondern dieselbe build-freie Bauweise wie der Santa-Rechner. Seit 1.11.2026 kommen die Daten aus `GameParams.data` (Build 15.9) über `tools/wows_gp/export_web.py`, abgeglichen mit der API. Phase 0 erledigt: Modulerkennung über `ShipUpgradeInfo.components`, `global.mo` als UTF-8 ohne Zeichensatz-Kopf. Offen für Phase 3: Patch-Historie.
 | 4 | `calc/`: Ballistik, Durchschlag, Streuung; gegen WoWs-ShipBuilder und Ingame-Werte validieren | 1–2 Wochen | Abweichung zu Referenz → nicht veröffentlichen |
 | 5 | Optional: Panzerungsviewer (Vorlage wows-toolkit) | Monate | — |
 

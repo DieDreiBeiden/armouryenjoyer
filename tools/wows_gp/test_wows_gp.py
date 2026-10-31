@@ -136,6 +136,35 @@ class T(unittest.TestCase):
         self.assertEqual(rep["changed"]["PGSB108_Tirpitz"][0]["path"], "A_Hull.health")
         self.assertIn("A_Hull.health: 72000 -> 74000", run("diff", self.f, new))
 
+def make_mo(entries):
+    """Kleine .mo-Datei wie im Client: UTF-8, ohne Zeichensatz-Kopfzeile."""
+    import struct
+    keys = sorted(entries)
+    ids = b"".join(k.encode() + b"\0" for k in keys)
+    strs = b"".join(entries[k].encode() + b"\0" for k in keys)
+    start = 28 + 16 * len(keys)
+    otab, ttab, off = [], [], 0
+    for k in keys:
+        otab += [len(k.encode()), start + off]
+        off += len(k.encode()) + 1
+    off = 0
+    for k in keys:
+        ttab += [len(entries[k].encode()), start + len(ids) + off]
+        off += len(entries[k].encode()) + 1
+    head = struct.pack("<7I", 0x950412DE, 0, len(keys), 28, 28 + 8 * len(keys), 0, 0)
+    return head + struct.pack(f"<{len(otab)}I", *otab) + struct.pack(f"<{len(ttab)}I", *ttab) + ids + strs
+
+
+class TestLocalization(unittest.TestCase):
+    def test_utf8_ohne_zeichensatz(self):
+        with tempfile.TemporaryDirectory() as d:
+            mo = Path(d) / "global.mo"
+            mo.write_bytes(make_mo({"IDS_PGSB108": "Tirpitz", "IDS_PRSD101": "Storoschewoi – Ü"}))
+            loc = wows_gp.Localization(mo)
+            self.assertEqual(loc.get("IDS_PRSD101"), "Storoschewoi – Ü")
+            self.assertEqual(loc.ship_name({"index": "PGSB108"}), "Tirpitz")
+            self.assertIsNone(loc.get("IDS_FEHLT"))
+
 
 if __name__ == "__main__":
     unittest.main()

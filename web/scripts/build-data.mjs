@@ -1,11 +1,12 @@
-// Holt alle Schiffe aus der Wargaming-Enzyklopädie und schreibt eine kompakte Datei für die Seite.
+// Holt alle Schiffe aus der Wargaming-Enzyklopädie. Die Seite nutzt Daten aus GameParams
+// (tools/wows_gp/export_web.py); diese Datei dient als Referenz für den Abgleich und liefert die Icon-Adressen.
 // Aufruf (im Ordner web/): node scripts/build-data.mjs [--from <ordner mit roh-json>]
 // Ohne --from wird die API abgefragt (WG_APPLICATION_ID, sonst die öffentliche ID der Seite).
 import fs from "node:fs";
 
 const APP_ID = process.env.WG_APPLICATION_ID || "445aebe856370e69f1f98f7b7b743e22";
 const API = "https://api.worldofwarships.eu/wows/encyclopedia";
-const OUT = new URL("../data/ships.json", import.meta.url);
+const OUT = new URL("../data/api-reference.json", import.meta.url);
 
 async function get(path, params = {}) {
   const u = new URL(`${API}/${path}/`);

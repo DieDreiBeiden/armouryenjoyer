@@ -39,6 +39,12 @@ Filter (`--nation`, `--type`, `--species`, `--name` als Regex) funktionieren bei
 - Werte sind Basiswerte ohne Kapitän, Module und Tarnung.
 - Sicherheit: Der Pickle wird mit einem eingeschränkten Unpickler gelesen. Unbekannte Klassen werden zu Platzhaltern, es wird kein fremder Code ausgeführt. Ein normales `pickle.loads` auf Dateien aus fremden Quellen kann beliebigen Code ausführen.
 
+## Export für die Seite
+
+`export_web.py` schreibt `web/data/ships.json` (Top-Konfiguration, Forschungsbaum, Namen DE/EN) und prüft mit `--compare` die Standard-Konfiguration gegen die WG-Enzyklopädie. Details: [web/README.md](../../web/README.md).
+
+Geprüft gegen Build 15.9: Module heißen in echten Daten frei (z. B. `AB_127_50`, `A1_610`), maßgeblich ist `ShipUpgradeInfo.components`; `global.mo` ist UTF-8 ohne Zeichensatz-Kopf und wird mit einem eigenen Leser gelesen.
+
 ## Tests
 
 ```

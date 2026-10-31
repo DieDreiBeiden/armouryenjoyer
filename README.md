@@ -19,10 +19,10 @@ web/                  statische Web-App ohne Build: Techbaum, Forschungskosten, 
 
 | Ordner | Inhalt | Stand |
 |---|---|---|
-| `tools/wows_gp/` | CLI zum Auslesen von `GameParams.data` | funktionsfähig, nur mit synthetischen Daten getestet |
+| `tools/wows_gp/` | CLI zum Auslesen von `GameParams.data`, Export für die Seite (`export_web.py`) | geprüft gegen Build 15.9 |
 | `extract/` | Extraktions-Pipeline | offen (Phase 1) |
 | `calc/` | Rechenmodul | offen (Phase 4) |
-| `web/` | Frontend: Techbaum, Forschungskosten, Vergleich unter https://armoury.starbane.de | läuft, Daten vorerst aus der Wargaming-API ([web/README.md](web/README.md)) |
+| `web/` | Frontend: Techbaum, Forschungskosten, Vergleich unter https://armoury.starbane.de | läuft mit GameParams-Daten ([web/README.md](web/README.md)) |
 | `data/` | Daten pro Build | wird nicht eingecheckt |
 | `docs/` | Fahrplan, Quellen | |
 
@@ -40,6 +40,6 @@ Details: [tools/wows_gp/README.md](tools/wows_gp/README.md)
 
 ## Regeln
 
-- Keine Spieldateien und keine daraus extrahierten Rohdaten einchecken (`data/` ist ignoriert).
-- Keine Supertest-Daten (NDA) verarbeiten oder veröffentlichen.
+- Keine Spieldateien und keine daraus extrahierten Rohdaten einchecken (`data/` ist ignoriert). Eingecheckt wird nur `web/data/ships.json` mit den Werten, die die Seite anzeigt.
+- Keine Supertest-Daten (NDA) verarbeiten oder veröffentlichen. Öffentliche Testschiffe nur ohne Werte.
 - Keinen dekompilierten Client-Code einchecken.

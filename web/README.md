@@ -4,21 +4,24 @@ Statische Seite unter https://armoury.starbane.de: Techbaum je Nation, Forschung
 
 ## Daten
 
-Vorerst aus der öffentlichen Wargaming-Enzyklopädie (EU), nicht aus `GameParams.data`:
+Aus den Spieldateien (`GameParams.data` + `global.mo`), erzeugt mit `tools/wows_gp/export_web.py`. Ablauf nach jedem Patch (lokal, weil der Client nötig ist):
+
+1. `GameParams.data` mit wowsunpack entpacken, `global.mo` (de, en) aus `bin/<build>/res/texts/<sprache>/LC_MESSAGES/` kopieren, alles nach `data/<build>/` (wird nicht eingecheckt).
+2. Export mit Abgleich gegen die WG-Enzyklopädie; bei Abweichungen bricht er ab und schreibt nichts:
 
 ```bash
-node scripts/build-data.mjs
+python3 -I tools/wows_gp/export_web.py data/15.9/GameParams.data --build 15.9 --loc-de data/15.9/de/global.mo --loc-en data/15.9/en/global.mo --out web/data/ships.json --compare web/data/api-reference.json
 ```
 
-```bash
-python3 -I scripts/icons.py
-```
+3. `npm test` in `web/`, committen, pushen. Die Seite wird automatisch veröffentlicht.
 
-- `data/ships.json`: kompakte Schiffsdaten (Stufe, Klasse, Nation, Preise, Nachfolger mit EP, Modulbaum, Standard-Profil).
-- `assets/img/ships/<id>.webp`: Icons, 128 × 75 px, lokal, damit die Seite keine Anfragen an Dritte stellt.
-- GitHub Actions (`data.yml`) holt beides jeden Montag neu und committet nur bei inhaltlichen Änderungen. Optional Secret `WG_APPLICATION_ID`, sonst die öffentliche ID der Seiten.
+Was eingecheckt wird: nur `web/data/ships.json` mit den angezeigten Werten, keine Rohdaten. Öffentliche Testschiffe stehen ohne Werte darin, Event-, Hilfs- und entfernte Schiffe gar nicht.
 
-Grenzen der API: nur Standardausrüstung, Flugabwehr nur als Wertung, keine Streuungs- oder Durchschlagswerte. Sobald die Pipeline aus `GameParams.data` (Phasen 0–2) läuft, kann sie `data/ships.json` im selben Format erzeugen.
+Werte: Top-Konfiguration (jeweils das am weitesten erforschte Modul), Reichweite mit Feuerleitsystem, Geschwindigkeit mit Antrieb, Streuung bei maximaler Reichweite, Torpedoschaden wie im Spiel angezeigt (alphaDamage / 3 + damage), Flak-Zonen außen/Mitte/innen mit DPS.
+
+Abgleich Build 15.9: 963 Schiffe mit Werten, Lebenspunkte, Wendekreis, Sichtbarkeit, Reichweite und Forschungs-EP ohne Abweichung. Geschwindigkeit wird nicht verglichen: die API liefert für viele ältere Schlachtschiffe zu niedrige Werte (Kongō 24,9 statt 30 kn).
+
+`scripts/build-data.mjs` holt nur noch die Referenz `data/api-reference.json` und die Icon-Adressen; `scripts/icons.py` lädt neue Icons. Beides läuft montags per GitHub Actions (`data.yml`). Fehlt danach ein neues Schiff in `ships.json`, schlägt der Test fehl: Zeit für einen neuen GameParams-Export.
 
 ## Aufbau
 
@@ -29,6 +32,7 @@ Grenzen der API: nur Standardausrüstung, Flugabwehr nur als Wertung, keine Stre
 | `assets/js/i18n.js` | Texte Deutsch/Englisch |
 | `assets/js/research.js` | Forschungspfad, Kosten (Schiffe + nötige Module + Kaufpreise), Anordnung des Techbaums; ohne DOM, getestet |
 | `assets/js/app.js` | Seitenlogik: Techbaum, Detail, Kosten, Premiumliste, Vergleich |
+| `../tools/wows_gp/export_web.py` | Export GameParams → `data/ships.json`, Abgleich mit der API |
 
 ## Forschungskosten
 

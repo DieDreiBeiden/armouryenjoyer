@@ -1,0 +1,330 @@
+#!/usr/bin/env python3
+"""GameParams.data -> web/data/ships.json für die Seite (armoury.starbane.de).
+
+Aufruf (aus dem Repo-Wurzelordner):
+    python3 -I tools/wows_gp/export_web.py data/<build>/GameParams.data --build 15.9 \
+        --loc-de data/<build>/de/global.mo --loc-en data/<build>/en/global.mo --out web/data/ships.json
+
+    --compare web/data/api-reference.json   Standard-Konfiguration gegen Werte der WG-API prüfen
+                                            (Abbruch mit Fehlercode bei Abweichungen)
+
+Regeln:
+- Nur öffentlich gelistete Schiffe (Gruppen wie in der WG-Enzyklopädie), keine Event-, Hilfs- oder
+  entfernten Schiffe.
+- Testschiffe (demoWithoutStats*) stehen ohne Werte in der Datei: Wargaming zeigt sie öffentlich
+  ausdrücklich ohne Werte, Supertest-Daten veröffentlichen wir nicht.
+- Werte der Top-Konfiguration (jeweils das am weitesten erforschte Modul), ohne Kommandanten und Upgrades.
+"""
+import argparse
+import datetime
+import json
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import wows_gp as w  # noqa: E402
+
+NATIONS = {
+    "USA": "usa", "Japan": "japan", "Germany": "germany", "Russia": "ussr", "United_Kingdom": "uk",
+    "France": "france", "Italy": "italy", "Pan_Asia": "pan_asia", "Europe": "europe",
+    "Pan_America": "pan_america", "Netherlands": "netherlands", "Commonwealth": "commonwealth", "Spain": "spain",
+}
+NATION_NAMES = {
+    "de": {"usa": "USA", "japan": "Japan", "germany": "Deutschland", "ussr": "UdSSR", "uk": "GB", "france": "Frankreich",
+           "italy": "Italien", "pan_asia": "Panasien", "europe": "Europa", "pan_america": "Panamerika",
+           "netherlands": "Die Niederlande", "commonwealth": "Commonwealth", "spain": "Spanien"},
+    "en": {"usa": "U.S.A.", "japan": "Japan", "germany": "Germany", "ussr": "U.S.S.R.", "uk": "U.K.", "france": "France",
+           "italy": "Italy", "pan_asia": "Pan-Asia", "europe": "Europe", "pan_america": "Pan-America",
+           "netherlands": "The Netherlands", "commonwealth": "Commonwealth", "spain": "Spain"},
+}
+TYPE_NAMES = {
+    "de": {"Destroyer": "Zerstörer", "Cruiser": "Kreuzer", "Battleship": "Schlachtschiff", "AirCarrier": "Flugzeugträger", "Submarine": "U-Boot"},
+    "en": {"Destroyer": "Destroyer", "Cruiser": "Cruiser", "Battleship": "Battleship", "AirCarrier": "Aircraft Carrier", "Submarine": "Submarine"},
+}
+# Gruppen, die auch die WG-Enzyklopädie listet (geprüft gegen Build 15.9: Schnittmenge vollständig)
+TREE = {"start", "upgradeable", "superShip"}
+PREMIUM = {"premium", "special", "specialUnsellable", "earlyAccess"}
+SPECIAL = {"ultimate", "clan", "experimental", "coopOnly"}
+TEST = {"demoWithoutStats", "demoWithoutStatsPrem"}
+PUBLIC = TREE | PREMIUM | SPECIAL | TEST
+BW = 30.0  # BigWorld-Einheit in Metern (Torpedo-Reichweite, Streuungsformel)
+UC_KEY = {"_Hull": "hull", "_Artillery": "artillery", "_Torpedoes": "torpedoes", "_Engine": "engine", "_Suo": "fireControl"}
+
+
+def num(v, nd=None):
+    v = w.to_plain(v)
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    return round(v, nd) if nd is not None else v
+
+
+def upgrades(raw):
+    """Forschbare Module eines Schiffs: Name -> Datensatz (ucType, prev, components, nextShips)."""
+    up = w._attrs(w._get(raw, "ShipUpgradeInfo")) or {}
+    return {k: v for k, v in up.items() if w._attrs(v) is not None}
+
+
+def depth(ups, name):
+    d, cur, guard = 0, name, 0
+    while cur and guard < 20:
+        cur = w.to_plain(w._get(ups[cur], "prev")) if cur in ups else ""
+        d += 1 if cur else 0
+        guard += 1
+    return d
+
+
+def pick_config(raw, top=True):
+    """Je Modultyp das tiefste (top) oder das Ausgangsmodul (Standard); liefert Modulnamen je Komponente."""
+    ups = upgrades(raw)
+    chosen = {}
+    for name, u in ups.items():
+        uc = w.to_plain(w._get(u, "ucType"))
+        if uc not in UC_KEY:
+            continue
+        d = depth(ups, name)
+        if uc not in chosen or (d > chosen[uc][1] if top else d < chosen[uc][1]):
+            chosen[uc] = (name, d)
+    comps = {}
+    hull = ups[chosen["_Hull"][0]] if "_Hull" in chosen else None
+    hull_c = w.to_plain(w._get(hull, "components")) or {} if hull is not None else {}
+    for key in ("hull", "airDefense", "atba", "artillery", "torpedoes", "engine", "fireControl"):
+        comps[key] = list(hull_c.get(key) or [])
+    for uc, (name, _) in chosen.items():
+        key = UC_KEY[uc]
+        own = (w.to_plain(w._get(ups[name], "components")) or {}).get(key) or []
+        # Modul passend zum gewählten Rumpf, sonst das erste des Moduls
+        both = [m for m in own if m in comps.get(key, [])] if key in ("artillery", "torpedoes") else own
+        if both or own:
+            comps[key] = both or own
+    return {k: (v[0] if v else None) for k, v in comps.items()}
+
+
+def mounts(module):
+    return [v for v in (w._attrs(module) or {}).values() if w._attrs(v) is not None and w._get(v, "ammoList") is not None]
+
+
+def gun_stats(gp, module, dist_coef=1.0):
+    ms = mounts(module)
+    if not ms:
+        return None
+    m0 = ms[0]
+    # Feuerleitsystem verlängert die Reichweite (maxDistCoef, z. B. 1,1 = +10 %)
+    rng = num(w._get(module, "maxDist"))
+    rng = rng * dist_coef if rng else rng
+    rot = w.to_plain(w._get(m0, "rotationSpeed"))
+    rot = rot[0] if isinstance(rot, list) and rot else rot
+    disp = None
+    ir, mr, idist = (num(w._get(m0, k)) for k in ("idealRadius", "minRadius", "idealDistance"))
+    if rng and ir is not None and mr is not None and idist:
+        disp = round(((rng / BW) / idist * (ir - mr) + mr) * BW)
+    shells = {}
+    for name in w.to_plain(w._get(m0, "ammoList")) or []:
+        p = gp.raw(name)
+        if p is None:
+            continue
+        t = w.to_plain(w._get(p, "ammoType"))
+        if t in shells:
+            continue
+        burn = num(w._get(p, "burnProb"))  # negativ = keine Brandchance (Platzhalter im Spiel)
+        shells[t] = {"dmg": num(w._get(p, "alphaDamage")), "speed": num(w._get(p, "bulletSpeed")),
+                     "burn": round(burn * 100, 1) if burn and burn > 0 else None,
+                     "pen": num(w._get(p, "alphaPiercingHE")) if t == "HE" else num(w._get(p, "alphaPiercingCS")) if t == "CS" else None}
+    cal = num(w._get(m0, "barrelDiameter"))
+    return {
+        "caliber": round(cal * 1000) if cal else None,
+        "barrels": sum(num(w._get(m, "numBarrels")) or 1 for m in ms),
+        "mounts": len(ms),
+        "reload": num(w._get(m0, "shotDelay"), 2),
+        "range": round(rng / 1000, 2) if rng else None,
+        "turn180": round(180 / rot, 1) if rot else None,
+        "disp": disp,
+        "he": shells.get("HE"), "ap": shells.get("AP"), "sap": shells.get("CS"),
+    }
+
+
+def torp_stats(gp, module):
+    ms = mounts(module)
+    if not ms:
+        return None
+    p = gp.raw((w.to_plain(w._get(ms[0], "ammoList")) or [None])[0])
+    if p is None:
+        return None
+    alpha, dmg = num(w._get(p, "alphaDamage")) or 0, num(w._get(p, "damage")) or 0
+    rng = num(w._get(p, "maxDist"))
+    return {
+        "tubes": sum(num(w._get(m, "numBarrels")) or 1 for m in ms),
+        "reload": num(w._get(ms[0], "shotDelay"), 1),
+        "range": round(rng * BW / 1000, 1) if rng else None,
+        # Schadensanzeige im Spiel: alphaDamage / 3 + damage
+        "dmg": round(alpha / 3 + dmg) if alpha else None,
+        "speed": num(w._get(p, "speed")),
+        "seen": num(w._get(p, "visibilityFactor"), 2),
+    }
+
+
+def aa_stats(raw, comps):
+    """Flak-Zonen aus Flugabwehr, Hauptbatterie und Sekundärgeschützen: {far|medium|near: [Reichweite km, DPS, Trefferchance %]}."""
+    zones = {}
+    for key in ("airDefense", "artillery", "atba"):
+        mod = w._get(raw, comps.get(key)) if comps.get(key) else None
+        for k, v in (w._attrs(mod) or {}).items():
+            if not str(k).startswith("Aura") or w._attrs(v) is None:
+                continue
+            dps, rng = num(w._get(v, "areaDamage")) or 0, num(w._get(v, "maxDistance")) or 0
+            if dps <= 0 or rng <= 0:
+                continue
+            z = zones.setdefault(w.to_plain(w._get(v, "type")) or k, [0, 0, 0])
+            z[0] = max(z[0], rng)
+            z[1] += dps
+            z[2] = max(z[2], round((num(w._get(v, "hitChance")) or 0) * 100))
+    return {k: [round(r / 1000, 1), round(d), h] for k, (r, d, h) in zones.items()} or None
+
+
+def hull_stats(raw, hull_name):
+    h = w._get(raw, hull_name) if hull_name else None
+    if h is None:
+        return {}
+    return {
+        "hp": num(w._get(h, "health")), "speed": num(w._get(h, "maxSpeed")),
+        "turn": num(w._get(h, "turningRadius")), "rudder": num(w._get(h, "rudderTime"), 1),
+        "seen": num(w._get(h, "visibilityFactor"), 2), "air": num(w._get(h, "visibilityFactorByPlane"), 2),
+    }
+
+
+def ship_stats(gp, raw, top=True):
+    c = pick_config(raw, top)
+    p = hull_stats(raw, c.get("hull"))
+    art = w._get(raw, c["artillery"]) if c.get("artillery") else None
+    tor = w._get(raw, c["torpedoes"]) if c.get("torpedoes") else None
+    atba = w._get(raw, c["atba"]) if c.get("atba") else None
+    fc = w._get(raw, c["fireControl"]) if c.get("fireControl") else None
+    eng = w._get(raw, c["engine"]) if c.get("engine") else None
+    if p.get("speed") is not None:
+        p["speed"] = round(p["speed"] * (1 + (num(w._get(eng, "speedCoef")) or 0)), 2)
+    p["gun"] = gun_stats(gp, art, num(w._get(fc, "maxDistCoef")) or 1.0) if art is not None else None
+    p["torp"] = torp_stats(gp, tor) if tor is not None else None
+    p["aa"] = aa_stats(raw, c)
+    sec = num(w._get(atba, "maxDist")) if atba is not None else None
+    p["sec"] = round(sec / 1000, 1) if sec else None
+    return p
+
+
+def empty_stats():
+    return {"hp": None, "speed": None, "turn": None, "rudder": None, "seen": None, "air": None,
+            "gun": None, "torp": None, "aa": None, "sec": None}
+
+
+def research(gp, raw, ids):
+    """Nachfolger mit EP und Modulbaum im Format der Seite."""
+    ups = upgrades(raw)
+    children = {}
+    for name, u in ups.items():
+        prev = w.to_plain(w._get(u, "prev"))
+        if prev:
+            children.setdefault(prev, []).append(name)
+    mods, nxt = [], {}
+    for name, u in ups.items():
+        unit = gp.raw(name)
+        xp = num(w._get(unit, "costXP")) if unit is not None else None
+        cr = num(w._get(unit, "costCR")) if unit is not None else None
+        ships = []
+        for sn in w.to_plain(w._get(u, "nextShips")) or []:
+            target = gp.raw(sn)
+            tid = w.to_plain(w._get(target, "id")) if target is not None else None
+            if tid in ids:
+                ships.append(tid)
+                nxt[str(tid)] = num(w._get(w._get(target, "ShipUpgradeInfo"), "costXP")) or 0
+        prev = w.to_plain(w._get(u, "prev"))
+        mods.append([name, xp or 0, cr or 0, ships, children.get(name, []), not prev and not xp])
+    return nxt, mods
+
+
+def build(gp, loc_de, loc_en, build_name, icons_dir=None):
+    raws = [(n, r) for n, r in gp.iter(type_="Ship") if w.to_plain(w._get(r, "group")) in PUBLIC]
+    ids = {w.to_plain(w._get(r, "id")) for _, r in raws}
+    ships = []
+    for name, raw in raws:
+        t, nation, species = gp.typeinfo(raw)
+        group = w.to_plain(w._get(raw, "group"))
+        sid = w.to_plain(w._get(raw, "id"))
+        nat = NATIONS.get(nation) or NATIONS.get(str(w.to_plain(w._get(raw, "navalFlag")) or "").title())
+        if nat is None or species not in TYPE_NAMES["en"]:
+            continue
+        info = w._get(raw, "ShipUpgradeInfo")
+        nxt, mods = research(gp, raw, ids)
+        test = group in TEST
+        name_en = loc_en.ship_name(raw) if loc_en else None
+        ships.append({
+            "id": sid, "name": name_en or str(w.to_plain(w._get(raw, "index"))),
+            "nameDe": (loc_de.ship_name(raw) if loc_de else None) or None,
+            "nation": nat, "type": species, "tier": num(w._get(raw, "level")),
+            "prem": group in PREMIUM or group == "demoWithoutStatsPrem", "special": group in SPECIAL, "test": test,
+            "credit": num(w._get(info, "costCR")) or None, "gold": num(w._get(info, "costGold")) or None,
+            "next": nxt, "mods": mods,
+            "p": empty_stats() if test else ship_stats(gp, raw, top=True),
+            "img": bool(icons_dir and (icons_dir / f"{sid}.webp").exists()),
+        })
+    ships.sort(key=lambda s: (s["tier"], s["name"]))
+    return {
+        "source": "GameParams", "version": build_name, "built": datetime.date.today().isoformat(),
+        "config": "top", "nations": NATION_NAMES, "types": TYPE_NAMES, "ships": ships,
+    }
+
+
+def compare(gp, data, ref_path):
+    """Standard-Konfiguration gegen die WG-API prüfen; gibt die Zahl der Abweichungen zurück."""
+    ref = {s["id"]: s for s in json.loads(pathlib.Path(ref_path).read_text())["ships"]}
+    # Geschwindigkeit nicht prüfen: die API liefert für viele ältere Schlachtschiffe zu niedrige Werte
+    # (Kongō 24,9 statt 30 kn, Bismarck 28,5 statt 31 kn); GameParams entspricht den Werten im Spiel.
+    checks = {"hp": 0, "turn": 1, "seen": 0.06}  # API rundet auf 0,1 km
+    bad, n = [], 0
+    for s in data["ships"]:
+        r = ref.get(s["id"])
+        if not r or s["test"]:
+            continue
+        stock = ship_stats(gp, gp.raw(str(s["id"])), top=False)
+        n += 1
+        for k, tol in checks.items():
+            a, b = stock.get(k), r["p"].get(k)
+            if a is not None and b is not None and abs(a - b) > tol:
+                bad.append(f"{s['name']}: {k} {a} != API {b}")
+        if r["p"].get("gun") and stock.get("gun") and abs((stock["gun"]["range"] or 0) - (r["p"]["gun"]["range"] or 0)) > 0.1:
+            bad.append(f"{s['name']}: gun.range {stock['gun']['range']} != API {r['p']['gun']['range']}")
+        for to, xp in s["next"].items():
+            if str(to) in r["next"] and r["next"][str(to)] != xp:
+                bad.append(f"{s['name']}: EP nach {to} {xp} != API {r['next'][str(to)]}")
+    missing = sorted(set(ref) - {s["id"] for s in data["ships"]})
+    print(f"Geprüft: {n} Schiffe, Abweichungen: {len(bad)}, nur in der API: {len(missing)}")
+    for line in bad[:40]:
+        print("  " + line)
+    return len(bad) + len(missing)
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("gameparams")
+    ap.add_argument("--build", required=True, help="Spielversion, z. B. 15.9")
+    ap.add_argument("--loc-de")
+    ap.add_argument("--loc-en")
+    ap.add_argument("--out", default="web/data/ships.json")
+    ap.add_argument("--icons", default="web/assets/img/ships")
+    ap.add_argument("--compare", help="ships.json aus der WG-API als Referenz")
+    ap.add_argument("--max-diff", type=int, default=0, help="erlaubte Abweichungen bei --compare")
+    a = ap.parse_args(argv)
+    gp = w.load_gameparams(a.gameparams)
+    loc_de = w.Localization(a.loc_de) if a.loc_de else None
+    loc_en = w.Localization(a.loc_en) if a.loc_en else None
+    data = build(gp, loc_de, loc_en, a.build, pathlib.Path(a.icons))
+    if a.compare:
+        diffs = compare(gp, data, a.compare)
+        if diffs > a.max_diff:
+            print(f"Abbruch: {diffs} Abweichungen (erlaubt {a.max_diff}). Nichts geschrieben.", file=sys.stderr)
+            return 1
+    out = pathlib.Path(a.out)
+    out.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
+    print(f"{len(data['ships'])} Schiffe -> {out} ({out.stat().st_size / 1e6:.2f} MB)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   # Nach der wöchentlichen Datenaktualisierung neu veröffentlichen
   workflow_run:
-    workflows: ["Schiffsdaten aktualisieren"]
+    workflows: ["API-Referenz und Icons aktualisieren"]
     types: [completed]
 
 permissions:
@@ -69,7 +69,7 @@ jobs:
         run: |
           mkdir -p _site
           cp -r web/index.html web/CNAME web/assets web/data web/fonts _site/
-          rm -f _site/data/icon-urls.json
+          rm -f _site/data/icon-urls.json _site/data/api-reference.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

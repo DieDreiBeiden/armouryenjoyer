@@ -30,9 +30,19 @@ Abgleich Build 15.9: 963 Schiffe mit Werten, Lebenspunkte, Wendekreis, Sichtbark
 | `index.html` | Markup, Sicherheitsregel (CSP: nur eigene Quellen) |
 | `assets/js/boot.js` | Sprache und Farbschema vor dem ersten Zeichnen |
 | `assets/js/i18n.js` | Texte Deutsch/Englisch |
+| `assets/js/builder.js` | Shipbuilder: Werte aus Modulen und Upgrades; ohne DOM, getestet |
 | `assets/js/research.js` | Forschungspfad, Kosten (Schiffe + nötige Module + Kaufpreise), Anordnung des Techbaums; ohne DOM, getestet |
 | `assets/js/app.js` | Seitenlogik: Techbaum, Detail, Kosten, Premiumliste, Vergleich |
 | `../tools/wows_gp/export_web.py` | Export GameParams → `data/ships.json`, Abgleich mit der API |
+
+## Shipbuilder
+
+Reiter „Shipbuilder“: Module je Typ (Rumpf, Hauptbatterie, Torpedos, Antrieb, Feuerleitsystem) und ein Upgrade je Slot wählen; die Werte rechnen sich neu, verglichen mit der Top-Konfiguration ohne Upgrades. Builds lassen sich als Link teilen (`?b=<id>.<Module>.<Upgrades>#builder`).
+
+- Daten: `data/builder.json` (aus `export_web.py`, wird erst beim Öffnen des Reiters geladen): Moduloptionen je Schiff, wählbare Upgrades je Slot (Bedingungen wie im Spiel: Stufe, Klasse, Nation, Gruppe, Ausnahmelisten), Effekt-Texte aus `global.mo`.
+- Rechnung: `assets/js/builder.js`, ohne DOM. Ohne Upgrades liefert sie für jedes Schiff exakt die Werte aus `ships.json` (Test).
+- Angewendet werden nur Modifikatoren mit eindeutiger Wirkung auf angezeigte Werte (Liste `APPLIED` im Export, in der Seite mit ◆ markiert); alle anderen stehen als Text dabei. Streuungs-Modifikatoren wirken auf die Streuung bei maximaler Reichweite.
+- Noch nicht enthalten: Kommandantenfähigkeiten, Signale, Verbrauchsmaterial.
 
 ## Forschungskosten
 

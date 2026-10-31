@@ -85,10 +85,10 @@ test("Sprache und Farbschema", async ({ page }) => {
 test("Kein seitliches Scrollen bei 320 px", async ({ page }) => {
   await guard(page);
   await page.setViewportSize({ width: 320, height: 800 });
-  await openSite(page, { lang: "de", cmp: [4282267344, 3751753712, 3555604464] });
-  for (const v of ["techbaum", "vergleich"]) {
+  await openSite(page, { lang: "de", cmp: [4282267344, 3751753712, 3555604464], build: { id: 4282267344, sel: null, up: [null, null, null, null, null, 0] } });
+  for (const v of ["techbaum", "vergleich", "builder"]) {
     await page.goto(`/#${v}`);
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(400);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), v).toBeLessThanOrEqual(0);
   }
 });
@@ -97,13 +97,14 @@ test.describe("Barrierefreiheit", () => {
   test.use({ bypassCSP: true });
   for (const theme of ["light", "dark"]) {
     test(`axe: beide Reiter ohne WCAG-2.2-AA-Verstöße (${theme})`, async ({ page }) => {
-      await openSite(page, { theme, nation: "japan", cmp: [4282267344, 3751753712] });
+      await openSite(page, { theme, nation: "japan", cmp: [4282267344, 3751753712], build: { id: 4282267344, sel: null, up: [null, null, null, null, null, null] } });
       await page.locator(".node", { hasText: "Fubuki" }).click();
       await page.locator("#setFrom").click();
       await page.locator(".node", { hasText: "Shimakaze" }).click();
       await page.locator("#setTo").click();
-      for (const v of ["techbaum", "vergleich"]) {
+      for (const v of ["techbaum", "vergleich", "builder"]) {
         await page.goto(`/#${v}`);
+        if (v === "builder") await page.locator("fieldset.slot").first().waitFor();
         await page.addScriptTag({ content: axeSource });
         const res = await page.evaluate(() => window.axe.run(document, {
           runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] },
@@ -114,4 +115,48 @@ test.describe("Barrierefreiheit", () => {
       }
     });
   }
+});
+
+test("Shipbuilder: Schiff wählen, Modul und Upgrade ändern Werte, Link teilen", async ({ page, context }) => {
+  const errors = await guard(page);
+  await openSite(page, { lang: "de", build: null }, "#builder");
+  await expect(page.locator("#bMsg")).toContainText("Such oben");
+  await page.fill("#bSearch", "shimakaze");
+  // Mehrere Treffer (z. B. „[Shimakaze]“): genau die Shimakaze anklicken
+  await page.locator("#bResults .hit").filter({ has: page.locator(".nm", { hasText: /^Shimakaze$/ }) }).click();
+  await expect(page.locator("#bHead .detail-name")).toHaveText("Shimakaze");
+  // Torpedomodul wechseln
+  const torp = page.locator('select[data-mod="torpedoes"]');
+  await torp.selectOption({ index: 0 });
+  await expect(page.locator("#bStats td.up").first()).toBeVisible();
+  await expect(page.locator("#bStats td.down").first()).toBeVisible();
+  // Hauptbatterie-Modifikation 3 in Slot 6
+  await page.locator("fieldset.slot").nth(5).locator("label.upg", { hasText: "Hauptbatterie-Modifikation 3" }).click();
+  const reload = page.locator("#bStats tr", { has: page.locator("th", { hasText: /^Nachladezeit$/ }) }).first();
+  await expect(reload.locator("td").nth(0)).toHaveText("5,74 s");
+  await expect(reload.locator("td").nth(1)).toContainText("5,05 s");
+  await expect(reload.locator("td").nth(1)).toHaveClass(/up/);
+  // Geteilter Link stellt denselben Build wieder her
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]).catch(() => {});
+  await page.locator("#bShare").click();
+  await expect(page.locator("#bMsg")).toContainText(/Link/);
+  const shareUrl = await page.evaluate(() => navigator.clipboard.readText().catch(() => null));
+  if (shareUrl) {
+    const p2 = await context.newPage();
+    await p2.goto(shareUrl.replace(/^https?:\/\/[^/]+/, ""));
+    await expect(p2.locator("#bHead .detail-name")).toHaveText("Shimakaze");
+    await expect(p2.locator("fieldset.slot").nth(5).locator("input:checked + .upg-t")).toHaveText("Hauptbatterie-Modifikation 3");
+    await p2.close();
+  }
+  expect(errors).toEqual([]);
+});
+
+test("Shipbuilder aus dem Techbaum öffnen, Testschiffe ohne Builder", async ({ page }) => {
+  await guard(page);
+  await openSite(page, { lang: "de", nation: "japan" });
+  await page.locator(".node", { hasText: "Yamato" }).click();
+  await page.locator("#toBuild").click();
+  await expect(page).toHaveURL(/#builder$/);
+  await expect(page.locator("#bHead .detail-name")).toHaveText("Yamato");
+  await expect(page.locator("fieldset.slot")).toHaveCount(6);
 });

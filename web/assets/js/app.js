@@ -154,10 +154,12 @@ function renderDetail() {
       <button type="button" id="setFrom" class="${state.from === s.id ? "" : "ghost"}" aria-pressed="${state.from === s.id}">${esc(t("detail.setFrom"))}</button>
       <button type="button" id="setTo" class="${state.to === s.id ? "" : "ghost"}" aria-pressed="${state.to === s.id}">${esc(t("detail.setTo"))}</button>
       <button type="button" id="addCmp" class="ghost"${inCmp ? " disabled" : ""}>${esc(t(inCmp ? "detail.inCompare" : "detail.compare"))}</button>
+      ${s.test ? "" : `<button type="button" id="toBuild" class="ghost">${esc(t("b.open"))}</button>`}
     </div>`;
   $("setFrom").addEventListener("click", () => { state.from = state.from === s.id ? null : s.id; if (state.from === state.to) state.to = null; changed(); });
   $("setTo").addEventListener("click", () => { state.to = state.to === s.id ? null : s.id; if (state.from === state.to) state.from = null; changed(); });
   $("addCmp").addEventListener("click", () => { addCompare(s.id); });
+  if ($("toBuild")) $("toBuild").addEventListener("click", () => openInBuilder(s.id));
 }
 
 function renderCost() {
@@ -300,11 +302,151 @@ $("cmpPicked").addEventListener("click", (e) => {
 });
 $("cmpClear").addEventListener("click", () => { state.cmp = []; changed(); });
 
+// ---------- Shipbuilder ----------
+// Daten werden erst geladen, wenn der Reiter offen ist. Zustand: Schiff, Modul je Typ, Upgrade je Slot.
+let BUILD = null, buildLoading = null;
+const build = store.get("build", { id: null, sel: null, up: [null, null, null, null, null, null] });
+if (!Array.isArray(build.up) || build.up.length !== 6) build.up = [null, null, null, null, null, null];
+// Link mit ?b=<id>.<Modul-Indizes>.<Upgrade-Indizes> übernimmt einen geteilten Build
+const shared = new URLSearchParams(location.search).get("b");
+function loadBuilder() {
+  if (BUILD || buildLoading) return buildLoading;
+  $("bMsg").className = "msg"; $("bMsg").textContent = t("b.loading");
+  buildLoading = fetch("data/builder.json" + ASSET_V).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then((d) => { BUILD = d; $("bMsg").textContent = ""; if (shared) applyShared(shared); renderBuilder(); })
+    .catch(() => { buildLoading = null; $("bMsg").className = "msg err"; $("bMsg").textContent = t("b.failed"); });
+  return buildLoading;
+}
+const BTYPES = ["hull", "artillery", "torpedoes", "engine", "fireControl"];
+function applyShared(code) {
+  const [id, mods, ups] = String(code).split(".");
+  const sb = BUILD.ships[id];
+  if (!sb) return;
+  build.id = +id;
+  const def = defaultSelection(sb);
+  const idx = (mods || "").split("-");
+  build.sel = Object.fromEntries(BTYPES.filter((k) => sb.o[k]).map((k, i) => [k, (sb.o[k][+idx[i]] || {}).u || def[k]]));
+  build.up = (ups || "").split("-").slice(0, 6).map((x, slot) => (x !== "" && sb.up[slot] && sb.up[slot].includes(+x) ? +x : null));
+  while (build.up.length < 6) build.up.push(null);
+  history.replaceState(null, "", location.pathname + "#builder");
+}
+function shareCode() {
+  const sb = BUILD.ships[build.id];
+  const mods = BTYPES.filter((k) => sb.o[k]).map((k) => Math.max(0, sb.o[k].findIndex((o) => o.u === build.sel[k]))).join("-");
+  return `${build.id}.${mods}.${build.up.map((x) => (x === null ? "" : x)).join("-")}`;
+}
+function openInBuilder(id) {
+  if (build.id !== id) { build.id = id; build.sel = null; build.up = [null, null, null, null, null, null]; }
+  store.set("build", build);
+  location.hash = "#builder";
+}
+function effectText(key, v) {
+  if (typeof v !== "number") return "";
+  const pct = v > 0 && v <= 5 && (!Number.isInteger(v) || /Coeff|Coefficient|Multiplier$/.test(key));
+  if (pct) { const d = Math.round((v - 1) * 1000) / 10; return `${d > 0 ? "+" : ""}${fmt1.format(d)} %`; }
+  return `${v > 0 ? "+" : ""}${fmt.format(v)}`;
+}
+function renderBuilder() {
+  if (!BUILD) return;
+  const s = ship(build.id), sb = s && BUILD.ships[s.id];
+  $("bHead").innerHTML = s ? `<div class="detail-head">${icon(s, "sicon big")}<div><div class="detail-name">${esc(shipName(s))}</div><div class="mini">${esc(ROMAN[s.tier])} · ${esc(typeName(s.type))} · ${esc(nationName(s.nation))}</div></div></div>` : "";
+  $("bBody").hidden = !sb;
+  if (!s) { $("bMsg").className = "msg"; $("bMsg").textContent = t("b.pick"); return; }
+  if (!sb) { $("bMsg").className = "msg"; $("bMsg").textContent = t("b.test"); return; }
+  $("bMsg").textContent = "";
+  const def = defaultSelection(sb);
+  if (!build.sel) build.sel = { ...def };
+  for (const k of BTYPES) if (sb.o[k] && !sb.o[k].some((o) => o.u === build.sel[k])) build.sel[k] = def[k];
+  build.up = build.up.map((x, slot) => (x !== null && sb.up[slot].includes(x) ? x : null));
+  store.set("build", build);
+  const L = (o) => o.n[LANG] || o.n.en;
+  $("bModules").innerHTML = BTYPES.filter((k) => sb.o[k]).map((k) => {
+    const list = sb.o[k];
+    const label = esc(t("b.mod." + k));
+    if (list.length === 1) return `<div class="kv"><span class="mini">${label}</span><span>${esc(L(list[0]))}</span></div>`;
+    return `<label class="f"><span>${label}</span><select data-mod="${k}">${list.map((o) => `<option value="${esc(o.u)}"${o.u === build.sel[k] ? " selected" : ""}>${esc(L(o))}</option>`).join("")}</select></label>`;
+  }).join("");
+  const applied = new Set(BUILD.applied);
+  $("bUpgrades").innerHTML = sb.up.map((list, slot) => {
+    if (!list.length) return "";
+    const opt = (i, title, effects) => `<label class="upg"><input type="radio" name="slot${slot}" value="${i}"${(build.up[slot] ?? -1) === i ? " checked" : ""}><span class="upg-t">${esc(title)}</span>${effects}</label>`;
+    const items = list.map((i) => {
+      const u = BUILD.upgrades[i];
+      const eff = Object.entries(u.mods).map(([k, v]) => {
+        const val = typeof v === "object" && v !== null ? v[s.type] : v;
+        // Effekte ohne Spieltext (interne Werte) nicht anzeigen
+        if (val === undefined || !BUILD.labels[k]) return "";
+        const lab = BUILD.labels[k][LANG] || BUILD.labels[k].en;
+        return `<li>${applied.has(k) ? `<span aria-hidden="true">◆ </span><span class="visually-hidden">${esc(t("b.applied"))}: </span>` : ""}${esc(lab)} ${esc(effectText(k, val))}</li>`;
+      }).join("");
+      return opt(i, u.t[LANG] || u.t.en, eff ? `<ul class="upg-e">${eff}</ul>` : "");
+    }).join("");
+    return `<fieldset class="slot"><legend>${esc(t("b.slot", { n: slot + 1 }))}</legend>${opt(-1, t("b.none"), "")}${items}</fieldset>`;
+  }).join("");
+  // Werte: Standard (Top ohne Upgrades) gegen Build
+  const chosen = build.up.filter((x) => x !== null);
+  const base = { ...s, p: computeBuild(sb, def, BUILD.upgrades, [], s.type) };
+  const cur = { ...s, p: computeBuild(sb, build.sel, BUILD.upgrades, chosen, s.type) };
+  let rows = "";
+  for (const [key, get, show, dir] of ROWS) {
+    if (!get) { rows += `<tr class="grp"><th scope="colgroup" colspan="3">${esc(t(key))}</th></tr>`; continue; }
+    if (!dir) continue;
+    const a = get(base), b = get(cur);
+    if (a === null && b === null) continue;
+    const txt = (x) => (x === null ? "–" : show ? show(x) : x);
+    let mark = "";
+    if (typeof a === "number" && typeof b === "number" && a !== b) {
+      const better = (b > a) === (dir > 0);
+      mark = better ? "up" : "down";
+      rows += `<tr><th scope="row">${esc(t(key))}</th><td class="num">${esc(txt(a))}</td><td class="num ${mark}">${esc(txt(b))} <span aria-hidden="true">${better ? "▲" : "▼"}</span><span class="visually-hidden"> (${esc(t(better ? "b.better" : "b.worse"))})</span></td></tr>`;
+    } else rows += `<tr><th scope="row">${esc(t(key))}</th><td class="num">${esc(txt(a))}</td><td class="num">${esc(txt(b))}</td></tr>`;
+  }
+  $("bStats").innerHTML = rows;
+}
+$("bModules").addEventListener("change", (e) => {
+  const k = e.target.dataset && e.target.dataset.mod;
+  if (k) { build.sel[k] = e.target.value; renderBuilder(); }
+});
+$("bUpgrades").addEventListener("change", (e) => {
+  const m = /^slot(\d)$/.exec(e.target.name || "");
+  if (m) { build.up[+m[1]] = +e.target.value < 0 ? null : +e.target.value; renderBuilder(); }
+});
+$("bReset").addEventListener("click", () => { build.sel = null; build.up = [null, null, null, null, null, null]; renderBuilder(); });
+$("bShare").addEventListener("click", () => {
+  if (!BUILD || !BUILD.ships[build.id]) return;
+  const url = `${location.origin}${location.pathname}?b=${shareCode()}#builder`;
+  const msg = $("bMsg");
+  const done = (ok) => { msg.className = ok ? "msg ok" : "msg"; msg.textContent = ok ? t("b.copied") : t("b.copyFailed", { url }); };
+  if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => done(true), () => done(false)); else done(false);
+});
+function renderBuildPicker() {
+  const q = nameKey($("bSearch").value.trim());
+  const hits = q ? DATA.ships.filter((s) => nameKey(s.name).includes(q) || (s.nameDe && nameKey(s.nameDe).includes(q)))
+    .sort((a, b) => (nameKey(a.name).startsWith(q) ? 0 : 1) - (nameKey(b.name).startsWith(q) ? 0 : 1) || b.tier - a.tier).slice(0, 8) : [];
+  $("bResults").innerHTML = hits.map((s) => `<button type="button" class="ghost hit" data-id="${s.id}">${icon(s)}<span class="nm">${esc(shipName(s))}</span><span class="mini">${ROMAN[s.tier]} · ${esc(nationName(s.nation))}</span></button>`).join("") +
+    (q && !hits.length ? `<p class="mini">${esc(t("cmp.noHit"))}</p>` : "");
+}
+$("bSearch").addEventListener("input", renderBuildPicker);
+$("bSearch").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const first = $("bResults").querySelector("button[data-id]");
+  if (first) first.click();
+});
+$("bResults").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-id]");
+  if (!b) return;
+  $("bSearch").value = ""; renderBuildPicker();
+  build.id = +b.dataset.id; build.sel = null; build.up = [null, null, null, null, null, null];
+  renderBuilder();
+});
+
 // ---------- Reiter ----------
-const VIEWS = ["techbaum", "vergleich"];
+const VIEWS = ["techbaum", "vergleich", "builder"];
 function showView() {
   const view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "techbaum";
   for (const id of VIEWS) $("v-" + id).hidden = id !== view;
+  if (view === "builder" && DATA) { if (BUILD) renderBuilder(); else loadBuilder(); }
   document.querySelectorAll("nav.tabs a").forEach((el) => { if (el.dataset.view === view) el.setAttribute("aria-current", "page"); else el.removeAttribute("aria-current"); });
 }
 window.addEventListener("hashchange", () => {
@@ -333,6 +475,7 @@ fetch("data/ships.json" + ASSET_V)
     $("footData").textContent = t("foot.data", { v: d.version, date });
     if (state.sel && !ship(state.sel)) state.sel = null;
     changed();
+    if (shared || location.hash === "#builder") { if (shared) location.hash = "#builder"; showView(); }
   })
   .catch(() => { msg.className = "msg err"; msg.textContent = t("msg.loadFailed"); });
 })();

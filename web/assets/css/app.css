@@ -290,3 +290,20 @@ img.missing { visibility: hidden; }
 .cmp-table tr.grp th { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); background: var(--sunk); border-bottom: 1px solid var(--rule-strong); padding-top: 10px; }
 .view > *, .stack > *, .grid2 > *, .panel > * { min-width: 0; }
 .wrap > * { min-width: 0; }
+
+/* ---------- Shipbuilder ---------- */
+nav.tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.builder { border-top: 3px solid var(--brass); }
+#bModules .kv { grid-template-columns: 9em 1fr; }
+fieldset.slot { border: 1px solid var(--rule); padding: 8px 10px 10px; gap: 4px; }
+fieldset.slot legend { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); padding: 0 4px; margin: 0; }
+.upg { display: grid; grid-template-columns: 24px 1fr; gap: 2px 8px; align-items: start; padding: 6px 4px; cursor: pointer; border-top: 1px solid var(--rule); }
+.upg:first-of-type { border-top: 0; }
+.upg input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--sea); }
+.upg-t { font-weight: 500; }
+.upg-e { grid-column: 2; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-soft); }
+.upg:has(input:checked) { background: var(--raised); }
+.b-table tbody th[scope="row"] { font-family: var(--body); font-size: 14px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--ink-soft); border-bottom: 1px solid var(--rule); }
+.b-table tr.grp th { font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); background: var(--sunk); }
+.b-table td.up { color: var(--good); font-weight: 600; }
+.b-table td.down { color: var(--warn); font-weight: 600; }

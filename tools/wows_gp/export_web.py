@@ -18,6 +18,7 @@ Regeln:
 import argparse
 import datetime
 import json
+import math
 import pathlib
 import sys
 
@@ -51,11 +52,17 @@ BW = 30.0  # BigWorld-Einheit in Metern (Torpedo-Reichweite, Streuungsformel)
 UC_KEY = {"_Hull": "hull", "_Artillery": "artillery", "_Torpedoes": "torpedoes", "_Engine": "engine", "_Suo": "fireControl"}
 
 
+def rnd(x, n=0):
+    """Kaufmännisch runden wie Math.round im Browser (Python round rundet 56,25 auf 56,2)."""
+    v = math.floor(x * 10 ** n + 0.5) / 10 ** n
+    return int(v) if n == 0 else v
+
+
 def num(v, nd=None):
     v = w.to_plain(v)
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         return None
-    return round(v, nd) if nd is not None else v
+    return rnd(v, nd) if nd is not None else v
 
 
 def upgrades(raw):
@@ -116,7 +123,7 @@ def gun_stats(gp, module, dist_coef=1.0):
     disp = None
     ir, mr, idist = (num(w._get(m0, k)) for k in ("idealRadius", "minRadius", "idealDistance"))
     if rng and ir is not None and mr is not None and idist:
-        disp = round(((rng / BW) / idist * (ir - mr) + mr) * BW)
+        disp = rnd(((rng / BW) / idist * (ir - mr) + mr) * BW)
     shells = {}
     for name in w.to_plain(w._get(m0, "ammoList")) or []:
         p = gp.raw(name)
@@ -127,16 +134,16 @@ def gun_stats(gp, module, dist_coef=1.0):
             continue
         burn = num(w._get(p, "burnProb"))  # negativ = keine Brandchance (Platzhalter im Spiel)
         shells[t] = {"dmg": num(w._get(p, "alphaDamage")), "speed": num(w._get(p, "bulletSpeed")),
-                     "burn": round(burn * 100, 1) if burn and burn > 0 else None,
+                     "burn": rnd(burn * 100, 1) if burn and burn > 0 else None,
                      "pen": num(w._get(p, "alphaPiercingHE")) if t == "HE" else num(w._get(p, "alphaPiercingCS")) if t == "CS" else None}
     cal = num(w._get(m0, "barrelDiameter"))
     return {
-        "caliber": round(cal * 1000) if cal else None,
+        "caliber": rnd(cal * 1000) if cal else None,
         "barrels": sum(num(w._get(m, "numBarrels")) or 1 for m in ms),
         "mounts": len(ms),
         "reload": num(w._get(m0, "shotDelay"), 2),
-        "range": round(rng / 1000, 2) if rng else None,
-        "turn180": round(180 / rot, 1) if rot else None,
+        "range": rnd(rng / 1000, 2) if rng else None,
+        "turn180": rnd(180 / rot, 1) if rot else None,
         "disp": disp,
         "he": shells.get("HE"), "ap": shells.get("AP"), "sap": shells.get("CS"),
     }
@@ -154,9 +161,9 @@ def torp_stats(gp, module):
     return {
         "tubes": sum(num(w._get(m, "numBarrels")) or 1 for m in ms),
         "reload": num(w._get(ms[0], "shotDelay"), 1),
-        "range": round(rng * BW / 1000, 1) if rng else None,
+        "range": rnd(rng * BW / 1000, 1) if rng else None,
         # Schadensanzeige im Spiel: alphaDamage / 3 + damage
-        "dmg": round(alpha / 3 + dmg) if alpha else None,
+        "dmg": rnd(alpha / 3 + dmg) if alpha else None,
         "speed": num(w._get(p, "speed")),
         "seen": num(w._get(p, "visibilityFactor"), 2),
     }
@@ -176,8 +183,8 @@ def aa_stats(raw, comps):
             z = zones.setdefault(w.to_plain(w._get(v, "type")) or k, [0, 0, 0])
             z[0] = max(z[0], rng)
             z[1] += dps
-            z[2] = max(z[2], round((num(w._get(v, "hitChance")) or 0) * 100))
-    return {k: [round(r / 1000, 1), round(d), h] for k, (r, d, h) in zones.items()} or None
+            z[2] = max(z[2], rnd((num(w._get(v, "hitChance")) or 0) * 100))
+    return {k: [rnd(r / 1000, 1), rnd(d), h] for k, (r, d, h) in zones.items()} or None
 
 
 def hull_stats(raw, hull_name):
@@ -200,12 +207,12 @@ def ship_stats(gp, raw, top=True):
     fc = w._get(raw, c["fireControl"]) if c.get("fireControl") else None
     eng = w._get(raw, c["engine"]) if c.get("engine") else None
     if p.get("speed") is not None:
-        p["speed"] = round(p["speed"] * (1 + (num(w._get(eng, "speedCoef")) or 0)), 2)
+        p["speed"] = rnd(p["speed"] * (1 + (num(w._get(eng, "speedCoef")) or 0)), 2)
     p["gun"] = gun_stats(gp, art, num(w._get(fc, "maxDistCoef")) or 1.0) if art is not None else None
     p["torp"] = torp_stats(gp, tor) if tor is not None else None
     p["aa"] = aa_stats(raw, c)
     sec = num(w._get(atba, "maxDist")) if atba is not None else None
-    p["sec"] = round(sec / 1000, 1) if sec else None
+    p["sec"] = rnd(sec / 1000, 1) if sec else None
     return p
 
 
@@ -271,6 +278,127 @@ def build(gp, loc_de, loc_en, build_name, icons_dir=None):
     }
 
 
+# ---------- Shipbuilder: alle Module je Schiff, Upgrades je Slot ----------
+# Modifikatoren, die die Seite auf Werte anwendet (alle anderen erscheinen nur als Text)
+APPLIED = {"GMShotDelay", "GMRotationSpeed", "GMMaxDist", "GMIdealRadius", "SGRudderTime", "visibilityDistCoeff",
+           "GTShotDelay", "torpedoSpeedMultiplier", "torpedoRangeCoefficient", "torpedoDamageCoeff", "GSMaxDist",
+           "AAAuraDamage", "healthHullCoeff", "GMAPDamageCoeff", "GMDamageCoeff"}
+
+
+# Eigene Texte für wichtige Effekte, für die das Spiel keinen eigenen Text mitliefert
+LABEL_FALLBACK = {
+    "burnChanceGMGSMultiplier": {"de": "Brandchance von Haupt- und Sekundärbatterie", "en": "Main and secondary battery fire chance"},
+    "healthRegenPercent": {"de": "Regeneration der Lebenspunkte", "en": "Hit point regeneration"},
+}
+
+
+def text(loc, key):
+    v = loc.get(key) if loc else None
+    return v.replace("-\n", "").replace("\n", " ").strip() if v else None
+
+
+def both(loc_de, loc_en, key, fallback):
+    return {"de": text(loc_de, key) or fallback, "en": text(loc_en, key) or fallback}
+
+
+def aura_zones(mod):
+    zones = {}
+    for k, v in (w._attrs(mod) or {}).items():
+        if not str(k).startswith("Aura") or w._attrs(v) is None:
+            continue
+        dps, rng = num(w._get(v, "areaDamage")) or 0, num(w._get(v, "maxDistance")) or 0
+        if dps > 0 and rng > 0:
+            zones.setdefault(w.to_plain(w._get(v, "type")) or k, []).append([rng, dps, rnd((num(w._get(v, "hitChance")) or 0) * 100)])
+    return zones
+
+
+def raw_gun(gp, module):
+    """Geschützwerte ohne Feuerleitsystem und Upgrades; der Browser rechnet Reichweite und Streuung."""
+    g = gun_stats(gp, module)
+    if not g:
+        return None
+    m0 = mounts(module)[0]
+    rot = w.to_plain(w._get(m0, "rotationSpeed"))
+    g.update({"rangeM": num(w._get(module, "maxDist")), "rot": rot[0] if isinstance(rot, list) else rot,
+              "ir": num(w._get(m0, "idealRadius")), "mr": num(w._get(m0, "minRadius")), "idist": num(w._get(m0, "idealDistance")),
+              "aura": aura_zones(module)})
+    return g
+
+
+def module_options(gp, raw, loc_de, loc_en):
+    ups = upgrades(raw)
+    opts = {k: [] for k in ("hull", "artillery", "torpedoes", "engine", "fireControl")}
+    for name, u in ups.items():
+        key = UC_KEY.get(w.to_plain(w._get(u, "ucType")))
+        if not key:
+            continue
+        comps = w.to_plain(w._get(u, "components")) or {}
+        o = {"u": name, "n": both(loc_de, loc_en, "IDS_" + name.upper(), name), "d": depth(ups, name)}
+        if key == "hull":
+            h = (comps.get("hull") or [None])[0]
+            hs = hull_stats(raw, h)
+            ad = w._get(raw, (comps.get("airDefense") or [None])[0]) if comps.get("airDefense") else None
+            atba = w._get(raw, (comps.get("atba") or [None])[0]) if comps.get("atba") else None
+            sec = num(w._get(atba, "maxDist")) if atba is not None else None
+            zones = aura_zones(ad)
+            for zk, zl in aura_zones(atba).items():
+                zones.setdefault(zk, []).extend(zl)
+            o.update(hs, sec=rnd(sec / 1000, 1) if sec else None, aura=zones,
+                     art=comps.get("artillery") or [], tor=comps.get("torpedoes") or [])
+        elif key == "artillery":
+            o["m"] = {m: raw_gun(gp, w._get(raw, m)) for m in comps.get("artillery") or [] if w._get(raw, m) is not None}
+        elif key == "torpedoes":
+            o["m"] = {m: torp_stats(gp, w._get(raw, m)) for m in comps.get("torpedoes") or [] if w._get(raw, m) is not None}
+        elif key == "engine":
+            o["speedCoef"] = num(w._get(w._get(raw, (comps.get("engine") or [None])[0]), "speedCoef")) or 0
+        elif key == "fireControl":
+            o["distCoef"] = num(w._get(w._get(raw, (comps.get("fireControl") or [None])[0]), "maxDistCoef")) or 1.0
+        opts[key].append(o)
+    for k in opts:
+        opts[k].sort(key=lambda o: o["d"])
+    return {k: v for k, v in opts.items() if v}
+
+
+def build_builder(gp, data, loc_de, loc_en):
+    mods = [(str(n), r) for n, r in gp.iter(type_="Modernization")]
+    upg = []
+    for n, m in mods:
+        upg.append({"name": n, "slot": num(w._get(m, "slot")), "type": num(w._get(m, "type")),
+                    "t": both(loc_de, loc_en, "IDS_TITLE_" + n.upper(), n),
+                    "mods": w.to_plain(w._get(m, "modifiers")) or {}})
+    keys = sorted({k for u in upg for k in u["mods"]})
+    labels = {}
+    for k in keys:
+        # Viele Texte liegen je Schiffsklasse vor (…_DESTROYER); ohne Spieltext bleibt der Effekt unbeschriftet
+        for suffix in ("", "_DESTROYER", "_CRUISER", "_BATTLESHIP", "_AIRCARRIER", "_SUBMARINE"):
+            key = "IDS_PARAMS_MODIFIER_" + k.upper() + suffix
+            if text(loc_en, key) or text(loc_de, key):
+                labels[k] = both(loc_de, loc_en, key, k)
+                break
+        else:
+            if k in LABEL_FALLBACK:
+                labels[k] = LABEL_FALLBACK[k]
+    ships = {}
+    for s in data["ships"]:
+        if s["test"]:
+            continue
+        name = gp.resolve(str(s["id"]))
+        raw = gp.root[name]
+        t, nat, sp = gp.typeinfo(raw)
+        lvl, grp = num(w._get(raw, "level")), w.to_plain(w._get(raw, "group"))
+        slots = [[] for _ in range(6)]
+        for i, (n, m) in enumerate(mods):
+            P = lambda k: w.to_plain(w._get(m, k)) or []
+            if str(name) in P("excludes"):
+                continue
+            if str(name) in P("ships") or (lvl in P("shiplevel") and sp in P("shiptype") and nat in P("nation") and grp in P("group")):
+                sl = num(w._get(m, "slot"))
+                if sl is not None and 0 <= sl < 6:
+                    slots[sl].append(i)
+        ships[str(s["id"])] = {"o": module_options(gp, raw, loc_de, loc_en), "up": slots}
+    return {"version": data["version"], "applied": sorted(APPLIED), "labels": labels, "upgrades": upg, "ships": ships}
+
+
 def compare(gp, data, ref_path):
     """Standard-Konfiguration gegen die WG-API prüfen; gibt die Zahl der Abweichungen zurück."""
     ref = {s["id"]: s for s in json.loads(pathlib.Path(ref_path).read_text())["ships"]}
@@ -308,6 +436,7 @@ def main(argv=None):
     ap.add_argument("--loc-en")
     ap.add_argument("--out", default="web/data/ships.json")
     ap.add_argument("--icons", default="web/assets/img/ships")
+    ap.add_argument("--builder-out", default="web/data/builder.json", help="Daten für den Shipbuilder")
     ap.add_argument("--compare", help="ships.json aus der WG-API als Referenz")
     ap.add_argument("--max-diff", type=int, default=0, help="erlaubte Abweichungen bei --compare")
     a = ap.parse_args(argv)
@@ -323,6 +452,9 @@ def main(argv=None):
     out = pathlib.Path(a.out)
     out.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
     print(f"{len(data['ships'])} Schiffe -> {out} ({out.stat().st_size / 1e6:.2f} MB)")
+    bout = pathlib.Path(a.builder_out)
+    bout.write_text(json.dumps(build_builder(gp, data, loc_de, loc_en), ensure_ascii=False, separators=(",", ":")))
+    print(f"Shipbuilder -> {bout} ({bout.stat().st_size / 1e6:.2f} MB)")
     return 0
 
 

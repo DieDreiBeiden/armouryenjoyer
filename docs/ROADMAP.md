@@ -6,6 +6,8 @@
 | 1 | `extract/`: Wrapper um `wowsunpack` (Build erkennen, entpacken, nach Build ablegen, `metadata` für Datei-Diffs) | 2–3 Tage | `wowsunpack` bricht nach Patch → eigener Python-Loader als Fallback |
 | 2 | Normalisiertes Datenmodell (alle Module, Top-Konfiguration, Lokalisierung), Patch-Diffs pro Build | 1–2 Wochen | Alternative Module nicht sauber abbildbar → Modell erweitern statt Sonderfälle |
 | 3 | `web/`: Tabelle, Vergleich 2–4 Schiffe, Patch-Historie | 2 Wochen | — |
+
+**Stand 31.10.2026:** `web/` ist vorgezogen und läuft mit Daten aus der Wargaming-API (Techbaum, Forschungskosten, Vergleich bis 6 Schiffe). Entscheidung: kein Vite/React, sondern dieselbe build-freie Bauweise wie der Santa-Rechner. Offen für Phase 3: Patch-Historie und Daten aus `GameParams.data` statt API.
 | 4 | `calc/`: Ballistik, Durchschlag, Streuung; gegen WoWs-ShipBuilder und Ingame-Werte validieren | 1–2 Wochen | Abweichung zu Referenz → nicht veröffentlichen |
 | 5 | Optional: Panzerungsviewer (Vorlage wows-toolkit) | Monate | — |
 

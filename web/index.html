@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Armoury · WoWs-Schiffsdaten</title>
+<meta name="description" content="Techbaum, Forschungskosten und Schiffsvergleich für World of Warships. Tech tree, research cost and ship comparison for World of Warships.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#e6edf0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#08141c" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/barlow-condensed-700-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/ibm-plex-sans-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/css/fonts.css?v=20261031-1">
+<link rel="stylesheet" href="assets/css/app.css?v=20261031-1">
+<script src="assets/js/boot.js?v=20261031-1"></script>
+</head>
+<body>
+<a class="skip" href="#main" data-i18n="skip">Zum Inhalt springen</a>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand-row">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 4 6v5.5c0 4.6 3.3 8.6 8 10 4.7-1.4 8-5.4 8-10V6z"/><path d="M12 7v10"/><path d="M8.5 11h7"/></svg>
+      <div class="brand">
+        <div class="eyebrow" id="eyebrow">World of Warships</div>
+        <h1>WoWs <span data-i18n="brand.name">Armoury</span></h1>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="ghost sm lang-btn" id="langBtn" data-i18n-attr="aria-label:lang.aria">DE</button>
+      <button type="button" class="ghost sm icon-btn" id="themeBtn">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 7a5 5 0 0 0 0 10z" fill="currentColor"/></svg>
+        <span id="themeLabel">Dunkel</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main" class="stack" style="gap: 20px;">
+  <div class="msg" id="loadMsg" role="status" aria-live="polite"></div>
+
+  <nav class="tabs" data-i18n-attr="aria-label:tab.aria">
+    <a href="#techbaum" data-view="techbaum"><span class="n">01</span><span data-i18n="tab.tree">Techbaum</span></a>
+    <a href="#vergleich" data-view="vergleich"><span class="n">02</span><span data-i18n="tab.compare">Vergleich</span></a>
+  </nav>
+
+  <!-- ============ TECHBAUM ============ -->
+  <div class="view stack" id="v-techbaum" hidden>
+  <section class="panel tree-panel" aria-labelledby="treeTitle">
+    <div class="panel-head">
+      <h2 id="treeTitle" data-i18n="tree.title">Techbaum</h2>
+      <span class="mini" id="dataInfo"></span>
+    </div>
+    <p class="lede" data-i18n="tree.lede"></p>
+    <div class="nations" id="nations" role="group" data-i18n-attr="aria-label:tree.nation"></div>
+    <div class="types" id="types" role="group" data-i18n-attr="aria-label:tree.type"></div>
+    <div class="tree-scroll" id="treeScroll" tabindex="0" role="region" aria-labelledby="treeTitle">
+      <div class="tree" id="tree"></div>
+    </div>
+    <p class="mini" data-i18n="tree.hint"></p>
+  </section>
+
+  <div class="grid2">
+    <section class="panel" aria-labelledby="detailTitle">
+      <h2 id="detailTitle" data-i18n="detail.title">Schiff</h2>
+      <div id="detail" class="stack"></div>
+    </section>
+    <section class="panel cost-panel" aria-labelledby="costTitle">
+      <h2 id="costTitle" data-i18n="cost.title">Forschungskosten</h2>
+      <p class="lede" data-i18n="cost.lede"></p>
+      <div class="cost-ends">
+        <div><span class="k" data-i18n="cost.from">Von</span><strong id="costFrom">–</strong></div>
+        <div><span class="k" data-i18n="cost.to">Bis</span><strong id="costTo">–</strong></div>
+      </div>
+      <div id="costResult" class="stack" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="extraTitle">
+    <div class="panel-head">
+      <h2 id="extraTitle" data-i18n="extra.title">Premium- und Sonderschiffe</h2>
+      <span class="mini" id="extraCount"></span>
+    </div>
+    <div id="extra" class="extra"></div>
+  </section>
+  </div>
+
+  <!-- ============ VERGLEICH ============ -->
+  <div class="view stack" id="v-vergleich" hidden>
+  <section class="panel" aria-labelledby="cmpTitle">
+    <div class="panel-head">
+      <h2 id="cmpTitle" data-i18n="cmp.title">Schiffe vergleichen</h2>
+      <button type="button" class="ghost sm" id="cmpClear" data-i18n="cmp.clear">Alle entfernen</button>
+    </div>
+    <p class="lede" data-i18n="cmp.lede"></p>
+    <label class="f"><span data-i18n="cmp.search">Schiff hinzufügen</span>
+      <input id="cmpSearch" type="search" autocomplete="off" spellcheck="false" aria-controls="cmpResults" data-i18n-attr="placeholder:cmp.searchPh"></label>
+    <div class="results" id="cmpResults"></div>
+    <div class="picked" id="cmpPicked"></div>
+    <p class="empty" id="cmpEmpty" data-i18n="cmp.empty"></p>
+    <div class="tbl" id="cmpWrap" tabindex="0" role="region" aria-labelledby="cmpTitle" hidden>
+      <table class="cmp-table"><thead id="cmpHead"></thead><tbody id="cmpBody"></tbody></table>
+    </div>
+    <p class="note" data-i18n="cmp.note"></p>
+  </section>
+  </div>
+  </main>
+
+  <footer>
+    <div id="footData"></div>
+    <div data-i18n-html="foot.legal"></div>
+  </footer>
+</div>
+<script src="assets/js/i18n.js?v=20261031-1" defer></script>
+<script src="assets/js/research.js?v=20261031-1" defer></script>
+<script src="assets/js/app.js?v=20261031-1" defer></script>
+</body>
+</html>

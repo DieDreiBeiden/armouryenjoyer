@@ -14,3 +14,6 @@ __pycache__/
 # Web
 node_modules/
 web/dist/
+test-results/
+playwright-report/
+_site/

@@ -14,7 +14,7 @@ data/<build>/         Rohdaten pro Build (nicht im Repo)
 data/<build>/*.json   normalisierte Daten (ships, projectiles, modernizations, diffs)
    │  calc/           Ballistik, Durchschlag, Streuung
    ▼
-web/                  statische Web-App: Tabelle, Vergleich, Patch-Historie, Diagramme
+web/                  statische Web-App ohne Build: Techbaum, Forschungskosten, Vergleich
 ```
 
 | Ordner | Inhalt | Stand |
@@ -22,7 +22,7 @@ web/                  statische Web-App: Tabelle, Vergleich, Patch-Historie, Dia
 | `tools/wows_gp/` | CLI zum Auslesen von `GameParams.data` | funktionsfähig, nur mit synthetischen Daten getestet |
 | `extract/` | Extraktions-Pipeline | offen (Phase 1) |
 | `calc/` | Rechenmodul | offen (Phase 4) |
-| `web/` | Frontend | offen (Phase 3) |
+| `web/` | Frontend: Techbaum, Forschungskosten, Vergleich unter https://armoury.starbane.de | läuft, Daten vorerst aus der Wargaming-API ([web/README.md](web/README.md)) |
 | `data/` | Daten pro Build | wird nicht eingecheckt |
 | `docs/` | Fahrplan, Quellen | |
 

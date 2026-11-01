@@ -70,6 +70,49 @@ export function compact(s) {
   };
 }
 
+// Icons und Texte für den Shipbuilder: Upgrades, Signale, Kommandantenfähigkeiten, Modultypen
+async function fetchAssets() {
+  const pages = async (path, params) => {
+    const out = {};
+    for (let page = 1; ; page++) {
+      const j = await get(path, { ...params, page_no: page, limit: 100 });
+      Object.assign(out, j.data);
+      if (page >= (j.meta.page_total || 1)) break;
+    }
+    return out;
+  };
+  const idx = (url) => ((url || "").match(/\/(?:icon_modernization_)?(PC[A-Z]{1,2}\d+)_/) || [])[1] || null;
+  const assets = { upgrades: {}, flags: {}, skills: {}, modules: {} };
+  for (const lang of ["de", "en"]) {
+    for (const type of ["Modernization", "Flags"]) {
+      const items = await pages("consumables", { type, language: lang });
+      for (const it of Object.values(items)) {
+        const key = idx(it.image);
+        if (!key) continue;
+        const bucket = type === "Flags" ? assets.flags : assets.upgrades;
+        const e = bucket[key] || (bucket[key] = { img: it.image, name: {}, desc: {} });
+        e.name[lang] = it.name;
+        e.desc[lang] = Object.values(it.profile || {}).map((x) => x.description).filter(Boolean);
+      }
+    }
+    const skills = (await get("crewskills", { language: lang })).data;
+    for (const [id, sk] of Object.entries(skills)) {
+      const e = assets.skills[id] || (assets.skills[id] = { img: sk.icon, name: {}, grid: {}, perks: {} });
+      e.name[lang] = sk.name;
+      for (const [cls, c] of Object.entries(sk.customization || {})) {
+        e.grid[cls] = [c.tier, c.column];
+        (e.perks[cls] || (e.perks[cls] = {}))[lang] = (c.perks || []).map((x) => x.description);
+      }
+    }
+  }
+  for (const type of ["Hull", "Artillery", "Torpedoes", "Engine", "Suo"]) {
+    const j = await get("modules", { type, limit: 1 });
+    const m = Object.values(j.data)[0];
+    if (m && m.image) assets.modules[type] = m.image;
+  }
+  return assets;
+}
+
 async function main() {
   const fromIdx = process.argv.indexOf("--from");
   let raw;
@@ -91,6 +134,10 @@ async function main() {
   // Bild-Adressen getrennt: nur für scripts/icons.py, die Seite lädt sie nicht
   const icons = Object.fromEntries(Object.values(raw).filter((s) => s && s.images && s.images.small).map((s) => [s.ship_id, s.images.small]));
   fs.writeFileSync(new URL("../data/icon-urls.json", import.meta.url), JSON.stringify(icons, null, 0));
+  // Shipbuilder: Texte und Bild-Adressen (wird von export_web.py eingebunden, Bilder lädt scripts/icons.py)
+  const assets = await fetchAssets();
+  fs.writeFileSync(new URL("../data/api-assets.json", import.meta.url), JSON.stringify(assets));
+  console.log(`Assets: ${Object.keys(assets.upgrades).length} Upgrades, ${Object.keys(assets.flags).length} Signale, ${Object.keys(assets.skills).length} Fähigkeiten`);
   console.log(`${ships.length} Schiffe, Version ${out.version}, ${(fs.statSync(OUT).size / 1e6).toFixed(2)} MB`);
 }
 

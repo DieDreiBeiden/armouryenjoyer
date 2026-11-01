@@ -104,7 +104,7 @@ test.describe("Barrierefreiheit", () => {
       await page.locator("#setTo").click();
       for (const v of ["techbaum", "vergleich", "builder"]) {
         await page.goto(`/#${v}`);
-        if (v === "builder") await page.locator("fieldset.slot").first().waitFor();
+        if (v === "builder") { await page.locator("#bSlots button").first().waitFor(); await page.locator("#bSlots button").nth(5).click(); await page.locator("#bSkills button").first().click(); }
         await page.addScriptTag({ content: axeSource });
         const res = await page.evaluate(() => window.axe.run(document, {
           runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] },
@@ -117,7 +117,7 @@ test.describe("Barrierefreiheit", () => {
   }
 });
 
-test("Shipbuilder: Schiff wählen, Modul und Upgrade ändern Werte, Link teilen", async ({ page, context }) => {
+test("Shipbuilder: Module, Upgrade, Fähigkeiten und Signale ändern Werte, Link teilen", async ({ page, context }) => {
   const errors = await guard(page);
   await openSite(page, { lang: "de", build: null }, "#builder");
   await expect(page.locator("#bMsg")).toContainText("Such oben");
@@ -125,17 +125,37 @@ test("Shipbuilder: Schiff wählen, Modul und Upgrade ändern Werte, Link teilen"
   // Mehrere Treffer (z. B. „[Shimakaze]“): genau die Shimakaze anklicken
   await page.locator("#bResults .hit").filter({ has: page.locator(".nm", { hasText: /^Shimakaze$/ }) }).click();
   await expect(page.locator("#bHead .detail-name")).toHaveText("Shimakaze");
-  // Torpedomodul wechseln
-  const torp = page.locator('select[data-mod="torpedoes"]');
-  await torp.selectOption({ index: 0 });
+  await expect(page.locator("#bStats tr.changed")).toHaveCount(0);
+
+  // Torpedomodul wechseln: Werte werden besser und schlechter markiert
+  await page.locator('#bModules button[data-mod="torpedoes"]').first().click();
   await expect(page.locator("#bStats td.up").first()).toBeVisible();
   await expect(page.locator("#bStats td.down").first()).toBeVisible();
-  // Hauptbatterie-Modifikation 3 in Slot 6
-  await page.locator("fieldset.slot").nth(5).locator("label.upg", { hasText: "Hauptbatterie-Modifikation 3" }).click();
+  await page.locator('#bModules button[data-mod="torpedoes"]').last().click();
+
+  // Upgrade über den Slot wählen
+  await page.locator("#bSlots button").nth(5).click();
+  await expect(page.locator("#bSlots button").nth(5)).toHaveAttribute("aria-expanded", "true");
+  await page.locator("#bSlotPick button[aria-label]").filter({ has: page.locator("img") }).and(page.locator('[aria-label*="Hauptbatterie-Modifikation"][aria-label$="3"]')).click();
   const reload = page.locator("#bStats tr", { has: page.locator("th", { hasText: /^Nachladezeit$/ }) }).first();
-  await expect(reload.locator("td").nth(0)).toHaveText("5,74 s");
-  await expect(reload.locator("td").nth(1)).toContainText("5,05 s");
-  await expect(reload.locator("td").nth(1)).toHaveClass(/up/);
+  await expect(reload.locator("td").nth(1)).toHaveText("5,05 s");
+  await expect(reload.locator(".delta")).toContainText("12");
+  await expect(page.locator("#bSlots button").nth(5).locator("img")).toBeVisible();
+
+  // Kommandant: Stufe 4 ohne Voraussetzung gesperrt, Punkte zählen mit
+  await expect(page.locator('#bSkills button[style*="grid-row:4;"]').first()).toHaveAttribute("aria-disabled", "true");
+  await page.locator('#bSkills button[style*="grid-row:1;"]').first().click();
+  await expect(page.locator("#bPoints")).toHaveText("1 / 21 Punkte");
+  await expect(page.locator('#bSkills button[style*="grid-row:2;"]').first()).toHaveAttribute("aria-disabled", "false");
+
+  // Signal
+  await page.locator("#bFlags button").first().click();
+  await expect(page.locator("#bFlagCount")).toHaveText("1 / 8");
+
+  // „Nur Änderungen“ blendet unveränderte Werte aus
+  await page.locator("#bOnlyChanged").check();
+  await expect(page.locator("#bStats tr:not(.grp):not(.changed)")).toHaveCount(0);
+
   // Geteilter Link stellt denselben Build wieder her
   await context.grantPermissions(["clipboard-read", "clipboard-write"]).catch(() => {});
   await page.locator("#bShare").click();
@@ -145,18 +165,22 @@ test("Shipbuilder: Schiff wählen, Modul und Upgrade ändern Werte, Link teilen"
     const p2 = await context.newPage();
     await p2.goto(shareUrl.replace(/^https?:\/\/[^/]+/, ""));
     await expect(p2.locator("#bHead .detail-name")).toHaveText("Shimakaze");
-    await expect(p2.locator("fieldset.slot").nth(5).locator("input:checked + .upg-t")).toHaveText("Hauptbatterie-Modifikation 3");
+    await expect(p2.locator("#bPoints")).toHaveText("1 / 21 Punkte");
+    await expect(p2.locator("#bFlagCount")).toHaveText("1 / 8");
+    await expect(p2.locator("#bSlots button").nth(5).locator("img")).toBeVisible();
     await p2.close();
   }
   expect(errors).toEqual([]);
 });
 
-test("Shipbuilder aus dem Techbaum öffnen, Testschiffe ohne Builder", async ({ page }) => {
+test("Shipbuilder aus dem Techbaum öffnen", async ({ page }) => {
   await guard(page);
   await openSite(page, { lang: "de", nation: "japan" });
   await page.locator(".node", { hasText: "Yamato" }).click();
   await page.locator("#toBuild").click();
   await expect(page).toHaveURL(/#builder$/);
   await expect(page.locator("#bHead .detail-name")).toHaveText("Yamato");
-  await expect(page.locator("fieldset.slot")).toHaveCount(6);
+  await expect(page.locator("#bSlots button")).toHaveCount(6);
+  await expect(page.locator("#bSkills button")).toHaveCount(24);
 });
+

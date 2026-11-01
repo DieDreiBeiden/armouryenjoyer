@@ -42,7 +42,10 @@ Reiter „Shipbuilder“: Module je Typ (Rumpf, Hauptbatterie, Torpedos, Antrieb
 - Daten: `data/builder.json` (aus `export_web.py`, wird erst beim Öffnen des Reiters geladen): Moduloptionen je Schiff, wählbare Upgrades je Slot (Bedingungen wie im Spiel: Stufe, Klasse, Nation, Gruppe, Ausnahmelisten), Effekt-Texte aus `global.mo`.
 - Rechnung: `assets/js/builder.js`, ohne DOM. Ohne Upgrades liefert sie für jedes Schiff exakt die Werte aus `ships.json` (Test).
 - Angewendet werden nur Modifikatoren mit eindeutiger Wirkung auf angezeigte Werte (Liste `APPLIED` im Export, in der Seite mit ◆ markiert); alle anderen stehen als Text dabei. Streuungs-Modifikatoren wirken auf die Streuung bei maximaler Reichweite.
-- Noch nicht enthalten: Kommandantenfähigkeiten, Signale, Verbrauchsmaterial.
+- Kommandant: Raster 4 × 6 je Schiffsklasse wie im Spiel, 21 Punkte, ab Stufe 2 nur mit einer Fähigkeit der Stufe davor. Eingerechnet werden nur die festen Effekte; 17 Fähigkeiten mit bedingten Effekten stehen als Text dabei.
+- Signale: bis zu 8, feste Effekte eingerechnet.
+- Icons (Module, Upgrades, Fähigkeiten, Signale) und Texte der Fähigkeiten kommen aus der WG-API (`scripts/build-data.mjs` → `data/api-assets.json`, `scripts/icons.py` → `assets/img/<art>/`), die Modifikatoren aus GameParams.
+- Noch nicht enthalten: Verbrauchsmaterial (Icons nur im Client).
 
 ## Forschungskosten
 

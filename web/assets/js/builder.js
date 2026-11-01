@@ -27,13 +27,13 @@ function pickModule(opt, allowed) {
   return opt.m[hit || names[0]] || null;
 }
 
-// Faktor eines Modifikators über alle gewählten Upgrades; Werte können je Schiffsklasse verschieden sein
-function factor(upgrades, chosen, key, species) {
+// Faktor eines Modifikators über alle gewählten Effekte (Upgrades, Fähigkeiten, Signale);
+// Werte können je Schiffsklasse verschieden sein
+function factor(mods, key, species) {
   let f = 1;
-  for (const i of chosen) {
-    const u = upgrades[i];
-    if (!u || !(key in u.mods)) continue;
-    const v = u.mods[key];
+  for (const m of mods) {
+    if (!m || !(key in m)) continue;
+    const v = m[key];
     const x = typeof v === "object" && v !== null ? v[species] : v;
     if (typeof x === "number") f *= x;
   }
@@ -54,8 +54,8 @@ function mergeAura(lists, dpsCoef) {
   return Object.keys(out).length ? out : null;
 }
 
-function computeBuild(sb, sel, upgrades, chosen, species) {
-  const F = (key) => factor(upgrades, chosen || [], key, species);
+function computeBuild(sb, sel, mods, species) {
+  const F = (key) => factor(mods || [], key, species);
   const hull = option(sb, "hull", sel.hull);
   const art = pickModule(option(sb, "artillery", sel.artillery), hull && hull.art);
   const tor = pickModule(option(sb, "torpedoes", sel.torpedoes), hull && hull.tor);
@@ -63,7 +63,7 @@ function computeBuild(sb, sel, upgrades, chosen, species) {
   const fc = option(sb, "fireControl", sel.fireControl);
   const p = {
     hp: hull && hull.hp !== null ? Math.round(hull.hp * F("healthHullCoeff")) : null,
-    speed: hull && hull.speed !== null ? r(hull.speed * (1 + (eng ? eng.speedCoef : 0)), 2) : null,
+    speed: hull && hull.speed !== null ? r(hull.speed * (1 + (eng ? eng.speedCoef : 0)) * F("speedCoef"), 2) : null,
     turn: hull ? hull.turn : null,
     rudder: hull && hull.rudder !== null ? r(hull.rudder * F("SGRudderTime"), 1) : null,
     seen: hull && hull.seen !== null ? r(hull.seen * F("visibilityDistCoeff"), 2) : null,

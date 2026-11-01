@@ -303,12 +303,22 @@ $("cmpPicked").addEventListener("click", (e) => {
 $("cmpClear").addEventListener("click", () => { state.cmp = []; changed(); });
 
 // ---------- Shipbuilder ----------
-// Daten werden erst geladen, wenn der Reiter offen ist. Zustand: Schiff, Modul je Typ, Upgrade je Slot.
-let BUILD = null, buildLoading = null;
-const build = store.get("build", { id: null, sel: null, up: [null, null, null, null, null, null] });
-if (!Array.isArray(build.up) || build.up.length !== 6) build.up = [null, null, null, null, null, null];
-// Link mit ?b=<id>.<Modul-Indizes>.<Upgrade-Indizes> übernimmt einen geteilten Build
+// Daten werden erst geladen, wenn der Reiter offen ist.
+// Zustand: Schiff, Modul je Typ, Upgrade je Slot, Kommandantenfähigkeiten (IDs), Signale (Schlüssel).
+let BUILD = null, buildLoading = null, openSlot = null;
+const EMPTY6 = () => [null, null, null, null, null, null];
+const build = Object.assign({ id: null, sel: null, up: EMPTY6(), sk: [], fl: [] }, store.get("build", {}) || {});
+if (!Array.isArray(build.up) || build.up.length !== 6) build.up = EMPTY6();
+if (!Array.isArray(build.sk)) build.sk = [];
+if (!Array.isArray(build.fl)) build.fl = [];
+const MAX_POINTS = 21, MAX_FLAGS = 8;
+const MOD_ICON = { hull: "Hull", artillery: "Artillery", torpedoes: "Torpedoes", engine: "Engine", fireControl: "Suo" };
+const BTYPES = ["hull", "artillery", "torpedoes", "engine", "fireControl"];
+// Link mit ?b=<id>.<Module>.<Upgrades>.<Fähigkeiten>.<Signale> übernimmt einen geteilten Build
 const shared = new URLSearchParams(location.search).get("b");
+const saveBuild = () => store.set("build", build);
+const L = (o) => (o && (o[LANG] || o.en)) || "";
+
 function loadBuilder() {
   if (BUILD || buildLoading) return buildLoading;
   $("bMsg").className = "msg"; $("bMsg").textContent = t("b.loading");
@@ -317,27 +327,29 @@ function loadBuilder() {
     .catch(() => { buildLoading = null; $("bMsg").className = "msg err"; $("bMsg").textContent = t("b.failed"); });
   return buildLoading;
 }
-const BTYPES = ["hull", "artillery", "torpedoes", "engine", "fireControl"];
 function applyShared(code) {
-  const [id, mods, ups] = String(code).split(".");
+  const [id, mods, ups, sks, fls] = String(code).split(".");
   const sb = BUILD.ships[id];
   if (!sb) return;
+  const s = ship(+id);
   build.id = +id;
   const def = defaultSelection(sb);
   const idx = (mods || "").split("-");
   build.sel = Object.fromEntries(BTYPES.filter((k) => sb.o[k]).map((k, i) => [k, (sb.o[k][+idx[i]] || {}).u || def[k]]));
   build.up = (ups || "").split("-").slice(0, 6).map((x, slot) => (x !== "" && sb.up[slot] && sb.up[slot].includes(+x) ? +x : null));
   while (build.up.length < 6) build.up.push(null);
+  build.sk = (sks || "").split("-").filter(Boolean).map(Number).filter((n) => BUILD.skills.some((k) => k.id === n && s && k.grid[s.type]));
+  build.fl = (fls || "").split("-").filter(Boolean).map(Number).filter((i) => BUILD.flags[i]).slice(0, MAX_FLAGS);
   history.replaceState(null, "", location.pathname + "#builder");
 }
 function shareCode() {
   const sb = BUILD.ships[build.id];
   const mods = BTYPES.filter((k) => sb.o[k]).map((k) => Math.max(0, sb.o[k].findIndex((o) => o.u === build.sel[k]))).join("-");
-  return `${build.id}.${mods}.${build.up.map((x) => (x === null ? "" : x)).join("-")}`;
+  return [build.id, mods, build.up.map((x) => (x === null ? "" : x)).join("-"), build.sk.join("-"), build.fl.join("-")].join(".");
 }
 function openInBuilder(id) {
-  if (build.id !== id) { build.id = id; build.sel = null; build.up = [null, null, null, null, null, null]; }
-  store.set("build", build);
+  if (build.id !== id) { build.id = id; build.sel = null; build.up = EMPTY6(); }
+  saveBuild();
   location.hash = "#builder";
 }
 function effectText(key, v) {
@@ -346,72 +358,195 @@ function effectText(key, v) {
   if (pct) { const d = Math.round((v - 1) * 1000) / 10; return `${d > 0 ? "+" : ""}${fmt1.format(d)} %`; }
   return `${v > 0 ? "+" : ""}${fmt.format(v)}`;
 }
+// Effektliste aus Modifikatoren; eingerechnete Effekte mit ◆
+function effectLines(mods, species) {
+  const applied = new Set(BUILD.applied);
+  return Object.entries(mods || {}).map(([k, v]) => {
+    const val = typeof v === "object" && v !== null ? v[species] : v;
+    if (val === undefined || typeof val !== "number" || !BUILD.labels[k]) return "";
+    return `<li>${applied.has(k) ? `<span class="dia" aria-hidden="true">◆</span><span class="visually-hidden">${esc(t("b.applied"))}: </span>` : ""}${esc(L(BUILD.labels[k]))} ${esc(effectText(k, val))}</li>`;
+  }).filter(Boolean).join("");
+}
+const img = (path, alt = "") => `<img src="assets/img/${path}.webp" alt="${esc(alt)}" width="48" height="48" decoding="async">`;
+
+// Kommandant: Kosten je Fähigkeit, Voraussetzung: ab Stufe 2 mindestens eine Fähigkeit der Stufe davor
+const skillCost = (k, cls) => (k.grid[cls] ? k.grid[cls][0] : 0);
+function skillPoints(cls) { return build.sk.reduce((a, id) => a + skillCost(BUILD.skills.find((k) => k.id === id) || { grid: {} }, cls), 0); }
+function tiersHeld(cls, without) {
+  const held = new Set();
+  for (const id of build.sk) if (id !== without) { const k = BUILD.skills.find((x) => x.id === id); if (k && k.grid[cls]) held.add(k.grid[cls][0]); }
+  return held;
+}
+function canAdd(k, cls) {
+  const cost = skillCost(k, cls);
+  return cost > 0 && skillPoints(cls) + cost <= MAX_POINTS && (cost === 1 || tiersHeld(cls).has(cost - 1));
+}
+// Entfernen nur, wenn alle übrigen Fähigkeiten ihre Voraussetzung behalten
+function canRemove(id, cls) {
+  const held = tiersHeld(cls, id);
+  return build.sk.filter((x) => x !== id).every((x) => {
+    const k = BUILD.skills.find((s) => s.id === x);
+    const c = k ? skillCost(k, cls) : 0;
+    return c <= 1 || held.has(c - 1);
+  });
+}
+
+function chosenMods(s) {
+  const out = build.up.filter((x) => x !== null).map((i) => BUILD.upgrades[i].mods);
+  for (const id of build.sk) { const k = BUILD.skills.find((x) => x.id === id); if (k && k.grid[s.type]) out.push(k.mods); }
+  for (const i of build.fl) if (BUILD.flags[i]) out.push(BUILD.flags[i].mods);
+  return out;
+}
+
 function renderBuilder() {
   if (!BUILD) return;
   const s = ship(build.id), sb = s && BUILD.ships[s.id];
-  $("bHead").innerHTML = s ? `<div class="detail-head">${icon(s, "sicon big")}<div><div class="detail-name">${esc(shipName(s))}</div><div class="mini">${esc(ROMAN[s.tier])} · ${esc(typeName(s.type))} · ${esc(nationName(s.nation))}</div></div></div>` : "";
-  $("bBody").hidden = !sb;
+  $("bBody").hidden = !sb; $("bDock").hidden = true;
   if (!s) { $("bMsg").className = "msg"; $("bMsg").textContent = t("b.pick"); return; }
   if (!sb) { $("bMsg").className = "msg"; $("bMsg").textContent = t("b.test"); return; }
   $("bMsg").textContent = "";
-  const def = defaultSelection(sb);
+  const cls = s.type, def = defaultSelection(sb);
   if (!build.sel) build.sel = { ...def };
   for (const k of BTYPES) if (sb.o[k] && !sb.o[k].some((o) => o.u === build.sel[k])) build.sel[k] = def[k];
   build.up = build.up.map((x, slot) => (x !== null && sb.up[slot].includes(x) ? x : null));
-  store.set("build", build);
-  const L = (o) => o.n[LANG] || o.n.en;
-  $("bModules").innerHTML = BTYPES.filter((k) => sb.o[k]).map((k) => {
-    const list = sb.o[k];
-    const label = esc(t("b.mod." + k));
-    if (list.length === 1) return `<div class="kv"><span class="mini">${label}</span><span>${esc(L(list[0]))}</span></div>`;
-    return `<label class="f"><span>${label}</span><select data-mod="${k}">${list.map((o) => `<option value="${esc(o.u)}"${o.u === build.sel[k] ? " selected" : ""}>${esc(L(o))}</option>`).join("")}</select></label>`;
+  build.sk = build.sk.filter((id) => { const k = BUILD.skills.find((x) => x.id === id); return k && k.grid[cls]; });
+  saveBuild();
+  $("bHead").innerHTML = `<div class="detail-head">${icon(s, "sicon big")}<div><div class="detail-name">${esc(shipName(s))}</div><div class="mini">${esc(ROMAN[s.tier])} · ${esc(typeName(s.type))} · ${esc(nationName(s.nation))}</div></div></div>`;
+
+  // Module: je Typ das Typ-Icon und die Varianten als Knöpfe
+  $("bModules").innerHTML = BTYPES.filter((k) => sb.o[k]).map((k) => `<div class="b-modrow"><span class="b-modicon" title="${esc(t("b.mod." + k))}">${img("modules/" + MOD_ICON[k], t("b.mod." + k))}</span>
+    <div class="b-modopts" role="group" aria-label="${esc(t("b.mod." + k))}">${sb.o[k].map((o) => `<button type="button" class="chip" data-mod="${k}" data-u="${esc(o.u)}" aria-pressed="${o.u === build.sel[k]}"${sb.o[k].length === 1 ? " disabled" : ""}>${esc(L(o.n))}</button>`).join("")}</div></div>`).join("");
+
+  // Upgrade-Slots: Icon des gewählten Upgrades oder +
+  $("bSlots").innerHTML = sb.up.map((list, slot) => {
+    const u = build.up[slot] !== null ? BUILD.upgrades[build.up[slot]] : null;
+    const label = `${t("b.slot", { n: slot + 1 })}: ${u ? L(u.t) : t("b.empty")}`;
+    return `<button type="button" class="b-slot${u ? " filled" : ""}" data-slot="${slot}" aria-expanded="${openSlot === slot}" aria-label="${esc(label)}" title="${esc(label)}"${list.length ? "" : " disabled"}>${u && u.icon ? img("upgrades/" + u.icon) : `<span aria-hidden="true">${list.length ? "+" : "–"}</span>`}</button>`;
   }).join("");
-  const applied = new Set(BUILD.applied);
-  $("bUpgrades").innerHTML = sb.up.map((list, slot) => {
-    if (!list.length) return "";
-    const opt = (i, title, effects) => `<label class="upg"><input type="radio" name="slot${slot}" value="${i}"${(build.up[slot] ?? -1) === i ? " checked" : ""}><span class="upg-t">${esc(title)}</span>${effects}</label>`;
-    const items = list.map((i) => {
-      const u = BUILD.upgrades[i];
-      const eff = Object.entries(u.mods).map(([k, v]) => {
-        const val = typeof v === "object" && v !== null ? v[s.type] : v;
-        // Effekte ohne Spieltext (interne Werte) nicht anzeigen
-        if (val === undefined || !BUILD.labels[k]) return "";
-        const lab = BUILD.labels[k][LANG] || BUILD.labels[k].en;
-        return `<li>${applied.has(k) ? `<span aria-hidden="true">◆ </span><span class="visually-hidden">${esc(t("b.applied"))}: </span>` : ""}${esc(lab)} ${esc(effectText(k, val))}</li>`;
-      }).join("");
-      return opt(i, u.t[LANG] || u.t.en, eff ? `<ul class="upg-e">${eff}</ul>` : "");
-    }).join("");
-    return `<fieldset class="slot"><legend>${esc(t("b.slot", { n: slot + 1 }))}</legend>${opt(-1, t("b.none"), "")}${items}</fieldset>`;
+  if (openSlot !== null && sb.up[openSlot] && sb.up[openSlot].length) {
+    const list = sb.up[openSlot];
+    $("bSlotPick").hidden = false;
+    $("bSlotPick").innerHTML = `<div class="b-pickhead">${esc(t("b.slot", { n: openSlot + 1 }))}</div><div class="b-icons">
+      <button type="button" class="b-icon none" data-upg="-1" aria-pressed="${build.up[openSlot] === null}" aria-label="${esc(t("b.none"))}" title="${esc(t("b.none"))}"><span aria-hidden="true">∅</span></button>
+      ${list.map((i) => { const u = BUILD.upgrades[i]; return `<button type="button" class="b-icon" data-upg="${i}" aria-pressed="${build.up[openSlot] === i}" aria-label="${esc(L(u.t))}" title="${esc(L(u.t))}">${u.icon ? img("upgrades/" + u.icon) : esc(L(u.t))}</button>`; }).join("")}</div>`;
+  } else { $("bSlotPick").hidden = true; $("bSlotPick").innerHTML = ""; }
+
+  // Kommandant: Raster 4 Kostenstufen × 6 Spalten wie im Spiel
+  const grid = BUILD.skills.filter((k) => k.grid[cls]).sort((a, b) => a.grid[cls][0] - b.grid[cls][0] || a.grid[cls][1] - b.grid[cls][1]);
+  $("bSkills").innerHTML = grid.map((k) => {
+    const on = build.sk.includes(k.id), ok = on ? canRemove(k.id, cls) : canAdd(k, cls);
+    return `<button type="button" class="b-icon skill${on ? " on" : ""}" data-skill="${k.id}" aria-pressed="${on}" aria-disabled="${!ok}" style="grid-row:${k.grid[cls][0]};grid-column:${k.grid[cls][1]}" aria-label="${esc(L(k.t))}, ${esc(t("b.cost", { n: k.grid[cls][0] }))}" title="${esc(L(k.t))}">${img("skills/" + k.id)}</button>`;
   }).join("");
-  // Werte: Standard (Top ohne Upgrades) gegen Build
-  const chosen = build.up.filter((x) => x !== null);
-  const base = { ...s, p: computeBuild(sb, def, BUILD.upgrades, [], s.type) };
-  const cur = { ...s, p: computeBuild(sb, build.sel, BUILD.upgrades, chosen, s.type) };
-  let rows = "";
+  $("bPoints").textContent = t("b.points", { n: skillPoints(cls), max: MAX_POINTS });
+
+  // Signale
+  $("bFlags").innerHTML = BUILD.flags.map((f, i) => {
+    const on = build.fl.includes(i), ok = on || build.fl.length < MAX_FLAGS;
+    return `<button type="button" class="b-icon flag${on ? " on" : ""}" data-flag="${i}" aria-pressed="${on}" aria-disabled="${!ok}" aria-label="${esc(L(f.t))}" title="${esc(L(f.t))}">${img("flags/" + f.key)}</button>`;
+  }).join("");
+  $("bFlagCount").textContent = t("b.flagCount", { n: build.fl.length, max: MAX_FLAGS });
+
+  renderBuildStats(s, sb, def);
+}
+
+// Werte: Standard (Top ohne Upgrades) gegen Build, Änderung in Prozent, farbig
+function renderBuildStats(s, sb, def) {
+  const base = { ...s, p: computeBuild(sb, def, [], s.type) };
+  const cur = { ...s, p: computeBuild(sb, build.sel, chosenMods(s), s.type) };
+  const only = $("bOnlyChanged").checked;
+  let rows = "", group = "", groupRows = "", dock = "";
+  const flush = () => { if (groupRows) rows += group + groupRows; groupRows = ""; };
   for (const [key, get, show, dir] of ROWS) {
-    if (!get) { rows += `<tr class="grp"><th scope="colgroup" colspan="3">${esc(t(key))}</th></tr>`; continue; }
+    if (!get) { flush(); group = `<tr class="grp"><th scope="colgroup" colspan="4">${esc(t(key))}</th></tr>`; continue; }
     if (!dir) continue;
     const a = get(base), b = get(cur);
     if (a === null && b === null) continue;
     const txt = (x) => (x === null ? "–" : show ? show(x) : x);
-    let mark = "";
-    if (typeof a === "number" && typeof b === "number" && a !== b) {
-      const better = (b > a) === (dir > 0);
-      mark = better ? "up" : "down";
-      rows += `<tr><th scope="row">${esc(t(key))}</th><td class="num">${esc(txt(a))}</td><td class="num ${mark}">${esc(txt(b))} <span aria-hidden="true">${better ? "▲" : "▼"}</span><span class="visually-hidden"> (${esc(t(better ? "b.better" : "b.worse"))})</span></td></tr>`;
-    } else rows += `<tr><th scope="row">${esc(t(key))}</th><td class="num">${esc(txt(a))}</td><td class="num">${esc(txt(b))}</td></tr>`;
+    const changed = typeof a === "number" && typeof b === "number" && a !== b;
+    if (only && !changed) continue;
+    if (!changed) { groupRows += `<tr><th scope="row">${esc(t(key))}</th><td class="num">${esc(txt(a))}</td><td class="num">${esc(txt(b))}</td><td></td></tr>`; continue; }
+    const better = (b > a) === (dir > 0), cls = better ? "up" : "down";
+    const pct = a ? ((b - a) / a) * 100 : 0;
+    const pctTxt = `${pct > 0 ? "+" : "−"}${fmt1.format(Math.abs(pct))} %`;
+    groupRows += `<tr class="changed"><th scope="row">${esc(t(key))}</th><td class="num">${esc(txt(a))}</td><td class="num ${cls}">${esc(txt(b))}</td>
+      <td class="num"><span class="delta ${cls}">${better ? "▲" : "▼"} ${esc(pctTxt)}</span><span class="visually-hidden"> (${esc(t(better ? "b.better" : "b.worse"))})</span></td></tr>`;
+    dock += `<span class="dock-item ${cls}">${esc(t(key))}: ${esc(txt(b))} <b>${esc(pctTxt)}</b></span>`;
   }
-  $("bStats").innerHTML = rows;
+  flush();
+  $("bStats").innerHTML = rows || `<tr><td colspan="4" class="mini">${esc(t("b.noChanges"))}</td></tr>`;
+  $("bDock").innerHTML = dock;
+  $("bDock").hidden = !dock;
 }
-$("bModules").addEventListener("change", (e) => {
-  const k = e.target.dataset && e.target.dataset.mod;
-  if (k) { build.sel[k] = e.target.value; renderBuilder(); }
+
+// Info zum gerade fokussierten oder überfahrenen Element
+function showInfo(el) {
+  const s = ship(build.id);
+  if (!s || !BUILD || !el) return;
+  let html = "";
+  if (el.dataset.upg !== undefined && +el.dataset.upg >= 0) {
+    const u = BUILD.upgrades[+el.dataset.upg];
+    html = `<strong>${esc(L(u.t))}</strong><ul>${effectLines(u.mods, s.type)}</ul>`;
+  } else if (el.dataset.skill) {
+    const k = BUILD.skills.find((x) => x.id === +el.dataset.skill);
+    const perks = (k.perks[s.type] && (k.perks[s.type][LANG] || k.perks[s.type].en)) || [];
+    html = `<strong>${esc(L(k.t))}</strong> <span class="mini">${esc(t("b.cost", { n: k.grid[s.type][0] }))}${k.cond ? " · " + esc(t("b.cond")) : ""}</span><ul>${perks.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`;
+  } else if (el.dataset.flag) {
+    const f = BUILD.flags[+el.dataset.flag];
+    html = `<strong>${esc(L(f.t))}</strong><ul>${effectLines(f.mods, s.type)}</ul>`;
+  }
+  if (html) $("bInfo").innerHTML = html;
+}
+for (const id of ["bSlotPick", "bSkills", "bFlags"]) {
+  $(id).addEventListener("mouseover", (e) => showInfo(e.target.closest("button")));
+  $(id).addEventListener("focusin", (e) => showInfo(e.target.closest("button")));
+}
+$("bModules").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-mod]");
+  if (b && !b.disabled) { build.sel[b.dataset.mod] = b.dataset.u; renderBuilder(); }
 });
-$("bUpgrades").addEventListener("change", (e) => {
-  const m = /^slot(\d)$/.exec(e.target.name || "");
-  if (m) { build.up[+m[1]] = +e.target.value < 0 ? null : +e.target.value; renderBuilder(); }
+$("bSlots").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-slot]");
+  if (!b) return;
+  openSlot = openSlot === +b.dataset.slot ? null : +b.dataset.slot;
+  renderBuilder();
+  const first = $("bSlotPick").querySelector('button[aria-pressed="true"]') || $("bSlotPick").querySelector("button");
+  if (first) first.focus();
 });
-$("bReset").addEventListener("click", () => { build.sel = null; build.up = [null, null, null, null, null, null]; renderBuilder(); });
+$("bSlotPick").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-upg]");
+  if (!b || openSlot === null) return;
+  const slot = openSlot;
+  build.up[slot] = +b.dataset.upg < 0 ? null : +b.dataset.upg;
+  openSlot = null;
+  renderBuilder();
+  $("bSlots").querySelector(`[data-slot="${slot}"]`).focus();
+});
+$("bSkills").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-skill]");
+  if (!b) return;
+  const s = ship(build.id), id = +b.dataset.skill, k = BUILD.skills.find((x) => x.id === id);
+  if (build.sk.includes(id)) {
+    if (!canRemove(id, s.type)) { $("bInfo").innerHTML = `<p class="msg err">${esc(t("b.skillDep"))}</p>`; return; }
+    build.sk = build.sk.filter((x) => x !== id);
+  } else {
+    if (!canAdd(k, s.type)) { $("bInfo").innerHTML = `<p class="msg err">${esc(t(skillPoints(s.type) + skillCost(k, s.type) > MAX_POINTS ? "b.noPoints" : "b.needTier"))}</p>`; return; }
+    build.sk.push(id);
+  }
+  renderBuilder();
+  $("bSkills").querySelector(`[data-skill="${id}"]`).focus();
+});
+$("bFlags").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-flag]");
+  if (!b) return;
+  const i = +b.dataset.flag;
+  if (build.fl.includes(i)) build.fl = build.fl.filter((x) => x !== i);
+  else if (build.fl.length < MAX_FLAGS) build.fl.push(i);
+  else { $("bInfo").innerHTML = `<p class="msg err">${esc(t("b.maxFlags", { n: MAX_FLAGS }))}</p>`; return; }
+  renderBuilder();
+  $("bFlags").querySelector(`[data-flag="${i}"]`).focus();
+});
+$("bOnlyChanged").addEventListener("change", () => renderBuilder());
+$("bReset").addEventListener("click", () => { build.sel = null; build.up = EMPTY6(); build.sk = []; build.fl = []; openSlot = null; $("bInfo").innerHTML = ""; renderBuilder(); });
 $("bShare").addEventListener("click", () => {
   if (!BUILD || !BUILD.ships[build.id]) return;
   const url = `${location.origin}${location.pathname}?b=${shareCode()}#builder`;
@@ -437,7 +572,8 @@ $("bResults").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-id]");
   if (!b) return;
   $("bSearch").value = ""; renderBuildPicker();
-  build.id = +b.dataset.id; build.sel = null; build.up = [null, null, null, null, null, null];
+  // Fähigkeiten und Signale bleiben beim Schiffswechsel erhalten, soweit sie zur Klasse passen
+  build.id = +b.dataset.id; build.sel = null; build.up = EMPTY6(); openSlot = null;
   renderBuilder();
 });
 

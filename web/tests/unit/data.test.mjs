@@ -50,3 +50,12 @@ test("GameParams-Daten gegen die WG-Enzyklopädie: gleiche Schiffe, Top-Konfigur
   const weaker = ref.ships.filter((r) => r.p.hp && byId.get(r.id).p.hp && byId.get(r.id).p.hp < r.p.hp).map((r) => r.name);
   assert.deepEqual(weaker, []);
 });
+
+test("Texte: keine doppelten Schlüssel (sie überschreiben sich sonst still)", () => {
+  const src = fs.readFileSync(root + "assets/js/i18n.js", "utf8");
+  for (const lang of ["de", "en"]) {
+    const block = src.slice(src.indexOf(`  ${lang}: {`), src.indexOf("\n  }", src.indexOf(`  ${lang}: {`)));
+    const keys = [...block.matchAll(/"([a-z][\w.]*)":/g)].map((m) => m[1]);
+    assert.deepEqual(keys.filter((k, i) => keys.indexOf(k) !== i), [], lang);
+  }
+});

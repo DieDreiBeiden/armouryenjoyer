@@ -282,7 +282,7 @@ def build(gp, loc_de, loc_en, build_name, icons_dir=None):
 # Modifikatoren, die die Seite auf Werte anwendet (alle anderen erscheinen nur als Text)
 APPLIED = {"GMShotDelay", "GMRotationSpeed", "GMMaxDist", "GMIdealRadius", "SGRudderTime", "visibilityDistCoeff",
            "GTShotDelay", "torpedoSpeedMultiplier", "torpedoRangeCoefficient", "torpedoDamageCoeff", "GSMaxDist",
-           "AAAuraDamage", "healthHullCoeff", "GMAPDamageCoeff", "GMDamageCoeff"}
+           "AAAuraDamage", "healthHullCoeff", "GMAPDamageCoeff", "GMDamageCoeff", "speedCoef"}
 
 
 # Eigene Texte für wichtige Effekte, für die das Spiel keinen eigenen Text mitliefert
@@ -359,14 +359,45 @@ def module_options(gp, raw, loc_de, loc_en):
     return {k: v for k, v in opts.items() if v}
 
 
-def build_builder(gp, data, loc_de, loc_en):
+def skills_and_flags(gp, loc_de, loc_en, assets):
+    """Kommandantenfähigkeiten (Raster und Texte aus der API, Modifikatoren aus GameParams) und Signale."""
+    crews = [r for _, r in gp.iter(type_="Crew")]
+    pool = max(crews, key=lambda r: len(w._attrs(w._get(r, "Skills")) or {})) if crews else None
+    by_type = {}
+    for key, v in (w._attrs(w._get(pool, "Skills")) or {}).items():
+        by_type[w.to_plain(w._get(v, "skillType"))] = (key, v)
+    skills = []
+    for sid, a in sorted((assets or {}).get("skills", {}).items(), key=lambda x: int(x[0])):
+        hit = by_type.get(int(sid))
+        if not hit or not a.get("grid"):
+            continue
+        key, v = hit
+        cond = w.to_plain(w._get(w._get(v, "LogicTrigger"), "modifiers")) or {}
+        skills.append({"id": int(sid), "key": key, "t": a["name"], "grid": a["grid"], "perks": a["perks"],
+                       "mods": w.to_plain(w._get(v, "modifiers")) or {}, "cond": bool(cond)})
+    flags = []
+    for n, r in gp.iter(type_="Exterior", species="Flags"):
+        idx = str(w.to_plain(w._get(r, "index")) or str(n).split("_")[0])
+        a = (assets or {}).get("flags", {}).get(idx)
+        mods = w.to_plain(w._get(r, "modifiers")) or {}
+        if not a or not mods:
+            continue
+        flags.append({"key": idx, "t": a["name"], "mods": mods})
+    flags.sort(key=lambda f: f["key"])
+    return skills, flags
+
+
+def build_builder(gp, data, loc_de, loc_en, assets=None):
     mods = [(str(n), r) for n, r in gp.iter(type_="Modernization")]
     upg = []
     for n, m in mods:
-        upg.append({"name": n, "slot": num(w._get(m, "slot")), "type": num(w._get(m, "type")),
+        icon = n.split("_")[0]
+        upg.append({"name": n, "icon": icon if (assets or {}).get("upgrades", {}).get(icon) else None,
+                    "slot": num(w._get(m, "slot")), "type": num(w._get(m, "type")),
                     "t": both(loc_de, loc_en, "IDS_TITLE_" + n.upper(), n),
                     "mods": w.to_plain(w._get(m, "modifiers")) or {}})
-    keys = sorted({k for u in upg for k in u["mods"]})
+    skills, flags = skills_and_flags(gp, loc_de, loc_en, assets)
+    keys = sorted({k for u in upg for k in u["mods"]} | {k for x in skills + flags for k in x["mods"]})
     labels = {}
     for k in keys:
         # Viele Texte liegen je Schiffsklasse vor (…_DESTROYER); ohne Spieltext bleibt der Effekt unbeschriftet
@@ -396,7 +427,8 @@ def build_builder(gp, data, loc_de, loc_en):
                 if sl is not None and 0 <= sl < 6:
                     slots[sl].append(i)
         ships[str(s["id"])] = {"o": module_options(gp, raw, loc_de, loc_en), "up": slots}
-    return {"version": data["version"], "applied": sorted(APPLIED), "labels": labels, "upgrades": upg, "ships": ships}
+    return {"version": data["version"], "applied": sorted(APPLIED), "labels": labels, "upgrades": upg,
+            "skills": skills, "flags": flags, "ships": ships}
 
 
 def compare(gp, data, ref_path):
@@ -437,6 +469,7 @@ def main(argv=None):
     ap.add_argument("--out", default="web/data/ships.json")
     ap.add_argument("--icons", default="web/assets/img/ships")
     ap.add_argument("--builder-out", default="web/data/builder.json", help="Daten für den Shipbuilder")
+    ap.add_argument("--assets", default="web/data/api-assets.json", help="Icons und Texte aus der WG-API (scripts/build-data.mjs)")
     ap.add_argument("--compare", help="ships.json aus der WG-API als Referenz")
     ap.add_argument("--max-diff", type=int, default=0, help="erlaubte Abweichungen bei --compare")
     a = ap.parse_args(argv)
@@ -453,7 +486,9 @@ def main(argv=None):
     out.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
     print(f"{len(data['ships'])} Schiffe -> {out} ({out.stat().st_size / 1e6:.2f} MB)")
     bout = pathlib.Path(a.builder_out)
-    bout.write_text(json.dumps(build_builder(gp, data, loc_de, loc_en), ensure_ascii=False, separators=(",", ":")))
+    assets_path = pathlib.Path(a.assets)
+    assets = json.loads(assets_path.read_text()) if assets_path.exists() else None
+    bout.write_text(json.dumps(build_builder(gp, data, loc_de, loc_en, assets), ensure_ascii=False, separators=(",", ":")))
     print(f"Shipbuilder -> {bout} ({bout.stat().st_size / 1e6:.2f} MB)")
     return 0
 

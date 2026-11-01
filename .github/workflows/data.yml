@@ -36,11 +36,11 @@ jobs:
         run: |
           # Inhaltlich gleich (nur das Abrufdatum neu) und keine neuen Icons: nichts committen
           same=$(node -e 'const a=JSON.parse(require("child_process").execSync("git show HEAD:web/data/api-reference.json"));const b=require("./data/api-reference.json");delete a.fetched;delete b.fetched;console.log(JSON.stringify(a)===JSON.stringify(b))')
-          if [ "$same" = "true" ] && [ -z "$(git status --porcelain -- assets/img data/icon-urls.json)" ]; then
+          if [ "$same" = "true" ] && [ -z "$(git status --porcelain -- assets/img data/icon-urls.json data/api-assets.json)" ]; then
             echo "Keine inhaltliche Änderung"; git checkout -- data; exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data assets/img/ships
+          git add data assets/img
           git commit -m "API-Referenz und Icons aktualisiert ($(node -p 'require("./data/api-reference.json").version'))"
           git push

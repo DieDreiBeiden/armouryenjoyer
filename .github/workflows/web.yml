@@ -69,7 +69,7 @@ jobs:
         run: |
           mkdir -p _site
           cp -r web/index.html web/CNAME web/assets web/data web/fonts _site/
-          rm -f _site/data/icon-urls.json _site/data/api-reference.json
+          rm -f _site/data/icon-urls.json _site/data/api-reference.json _site/data/api-assets.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -35,4 +35,33 @@ for ship_id, url in URLS.items():
     except Exception as e:  # einzelne Fehler nicht abbrechen lassen
         failed += 1
         print(f"{ship_id}: {e}", file=sys.stderr)
-print(f"neu {done}, vorhanden {skipped}, Fehler {failed}")
+print(f"Schiffe: neu {done}, vorhanden {skipped}, Fehler {failed}")
+
+# Shipbuilder: Upgrades, Signale, Kommandantenfähigkeiten, Modultypen (quadratisch, Transparenz bleibt)
+ASSETS = ROOT / "data" / "api-assets.json"
+if ASSETS.exists():
+    assets = json.loads(ASSETS.read_text())
+    jobs = [(f"upgrades/{k}", v["img"]) for k, v in assets["upgrades"].items()]
+    jobs += [(f"flags/{k}", v["img"]) for k, v in assets["flags"].items()]
+    jobs += [(f"skills/{k}", v["img"]) for k, v in assets["skills"].items()]
+    jobs += [(f"modules/{k}", v) for k, v in assets["modules"].items()]
+    done = skipped = failed = 0
+    for rel, url in jobs:
+        target = ROOT / "assets" / "img" / f"{rel}.webp"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            skipped += 1
+            continue
+        if not url or not url.startswith(ALLOWED):
+            failed += 1
+            continue
+        try:
+            with urllib.request.urlopen(url, timeout=30) as res:
+                img = Image.open(io.BytesIO(res.read(2_000_000))).convert("RGBA")
+            img.thumbnail((80, 80), Image.LANCZOS)
+            img.save(target, "WEBP", quality=88, method=6)
+            done += 1
+        except Exception as e:
+            failed += 1
+            print(f"{rel}: {e}", file=sys.stderr)
+    print(f"Builder-Icons: neu {done}, vorhanden {skipped}, Fehler {failed}")

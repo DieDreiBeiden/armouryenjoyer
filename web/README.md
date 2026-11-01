@@ -13,7 +13,13 @@ Aus den Spieldateien (`GameParams.data` + `global.mo`), erzeugt mit `tools/wows_
 python3 -I tools/wows_gp/export_web.py data/15.9/GameParams.data --build 15.9 --loc-de data/15.9/de/global.mo --loc-en data/15.9/en/global.mo --out web/data/ships.json --compare web/data/api-reference.json
 ```
 
-3. `npm test` in `web/`, committen, pushen. Die Seite wird automatisch veröffentlicht.
+3. Icons für Verbrauchsmaterial (nur im Client): `gui/consumables` mit wowsunpack nach `data/<build>/gui/` entpacken, dann im Ordner `web/`:
+
+```bash
+python3 -I scripts/client-icons.py ../data/15.9/gui
+```
+
+4. `npm test` in `web/`, committen, pushen. Die Seite wird automatisch veröffentlicht.
 
 Was eingecheckt wird: nur `web/data/ships.json` mit den angezeigten Werten, keine Rohdaten. Öffentliche Testschiffe stehen ohne Werte darin, Event-, Hilfs- und entfernte Schiffe gar nicht.
 
@@ -45,7 +51,7 @@ Reiter „Shipbuilder“: Module je Typ (Rumpf, Hauptbatterie, Torpedos, Antrieb
 - Kommandant: Raster 4 × 6 je Schiffsklasse wie im Spiel, 21 Punkte, ab Stufe 2 nur mit einer Fähigkeit der Stufe davor. Eingerechnet werden nur die festen Effekte; 17 Fähigkeiten mit bedingten Effekten stehen als Text dabei.
 - Signale: bis zu 8, feste Effekte eingerechnet.
 - Icons (Module, Upgrades, Fähigkeiten, Signale) und Texte der Fähigkeiten kommen aus der WG-API (`scripts/build-data.mjs` → `data/api-assets.json`, `scripts/icons.py` → `assets/img/<art>/`), die Modifikatoren aus GameParams.
-- Noch nicht enthalten: Verbrauchsmaterial (Icons nur im Client).
+- Verbrauchsmaterial: Varianten je Slot aus GameParams (Ladungen, Ladezeit, Wirkdauer), Icons aus dem Client (`scripts/client-icons.py`). Eingerechnet werden allgemeine und artbezogene Faktoren für Ladezeit und Dauer sowie Zuschläge auf Ladungen.
 
 ## Forschungskosten
 

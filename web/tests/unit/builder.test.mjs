@@ -64,3 +64,23 @@ test("Fähigkeiten und Signale: Raster wie im Spiel, Effekte werden eingerechnet
   assert.equal(p.speed, Math.round(s.p.speed * sm.mods.speedCoef * 100) / 100);
 });
 
+
+test("Verbrauchsmaterial: Rohwerte ohne Effekte, Upgrades verlängern Dauer, jedes hat ein Icon", () => {
+  const computeConsumables = g("computeConsumables");
+  const s = DATA.ships.find((x) => x.name === "Shimakaze");
+  const sb = B.ships[s.id];
+  const base = plain(computeConsumables(sb, [], [], s.type));
+  assert.deepEqual(base.map((c) => [c.a, c.n, c.reload, c.work]), sb.c.map((o) => [o[0].a, o[0].n, o[0].reload, o[0].work]));
+  // Allgemeine Wirkdauer +10 % (Upgrade „Schiffsverbrauchsmaterial-Modifikation 1“)
+  const up = B.upgrades.find((u) => u.mods.ConsumablesWorkTime && u.mods.ConsumablesWorkTime > 1);
+  assert.ok(up, "Upgrade mit ConsumablesWorkTime");
+  const smoke = sb.c.findIndex((o) => o[0].type === "smokeGenerator");
+  const withUp = computeConsumables(sb, [], [up.mods], s.type);
+  assert.equal(withUp[smoke].work, Math.round(sb.c[smoke][0].work * up.mods.ConsumablesWorkTime * 10) / 10);
+  // Unbegrenzte Ladungen bleiben unbegrenzt
+  const dcp = sb.c.findIndex((o) => o[0].type === "crashCrew");
+  assert.equal(computeConsumables(sb, [], [{ additionalConsumables: 1 }], s.type)[dcp].n, -1);
+  const names = new Set(Object.values(B.ships).flatMap((x) => x.c.flat().map((c) => c.a)));
+  const missing = [...names].filter((n) => !fs.existsSync(`${root}assets/img/consumables/${n}.webp`));
+  assert.deepEqual(missing, []);
+});

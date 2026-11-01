@@ -307,7 +307,8 @@ $("cmpClear").addEventListener("click", () => { state.cmp = []; changed(); });
 // Zustand: Schiff, Modul je Typ, Upgrade je Slot, Kommandantenfähigkeiten (IDs), Signale (Schlüssel).
 let BUILD = null, buildLoading = null, openSlot = null;
 const EMPTY6 = () => [null, null, null, null, null, null];
-const build = Object.assign({ id: null, sel: null, up: EMPTY6(), sk: [], fl: [] }, store.get("build", {}) || {});
+const build = Object.assign({ id: null, sel: null, up: EMPTY6(), sk: [], fl: [], cs: [] }, store.get("build", {}) || {});
+if (!Array.isArray(build.cs)) build.cs = [];
 if (!Array.isArray(build.up) || build.up.length !== 6) build.up = EMPTY6();
 if (!Array.isArray(build.sk)) build.sk = [];
 if (!Array.isArray(build.fl)) build.fl = [];
@@ -328,7 +329,7 @@ function loadBuilder() {
   return buildLoading;
 }
 function applyShared(code) {
-  const [id, mods, ups, sks, fls] = String(code).split(".");
+  const [id, mods, ups, sks, fls, css] = String(code).split(".");
   const sb = BUILD.ships[id];
   if (!sb) return;
   const s = ship(+id);
@@ -340,15 +341,16 @@ function applyShared(code) {
   while (build.up.length < 6) build.up.push(null);
   build.sk = (sks || "").split("-").filter(Boolean).map(Number).filter((n) => BUILD.skills.some((k) => k.id === n && s && k.grid[s.type]));
   build.fl = (fls || "").split("-").filter(Boolean).map(Number).filter((i) => BUILD.flags[i]).slice(0, MAX_FLAGS);
+  build.cs = (css || "").split("-").map((x, slot) => (sb.c[slot] && sb.c[slot][+x] ? +x : 0));
   history.replaceState(null, "", location.pathname + "#builder");
 }
 function shareCode() {
   const sb = BUILD.ships[build.id];
   const mods = BTYPES.filter((k) => sb.o[k]).map((k) => Math.max(0, sb.o[k].findIndex((o) => o.u === build.sel[k]))).join("-");
-  return [build.id, mods, build.up.map((x) => (x === null ? "" : x)).join("-"), build.sk.join("-"), build.fl.join("-")].join(".");
+  return [build.id, mods, build.up.map((x) => (x === null ? "" : x)).join("-"), build.sk.join("-"), build.fl.join("-"), build.cs.join("-")].join(".");
 }
 function openInBuilder(id) {
-  if (build.id !== id) { build.id = id; build.sel = null; build.up = EMPTY6(); }
+  if (build.id !== id) { build.id = id; build.sel = null; build.up = EMPTY6(); build.cs = []; }
   saveBuild();
   location.hash = "#builder";
 }
@@ -410,6 +412,7 @@ function renderBuilder() {
   for (const k of BTYPES) if (sb.o[k] && !sb.o[k].some((o) => o.u === build.sel[k])) build.sel[k] = def[k];
   build.up = build.up.map((x, slot) => (x !== null && sb.up[slot].includes(x) ? x : null));
   build.sk = build.sk.filter((id) => { const k = BUILD.skills.find((x) => x.id === id); return k && k.grid[cls]; });
+  build.cs = (sb.c || []).map((opts, slot) => (opts[build.cs[slot]] ? build.cs[slot] : 0));
   saveBuild();
   $("bHead").innerHTML = `<div class="detail-head">${icon(s, "sicon big")}<div><div class="detail-name">${esc(shipName(s))}</div><div class="mini">${esc(ROMAN[s.tier])} · ${esc(typeName(s.type))} · ${esc(nationName(s.nation))}</div></div></div>`;
 
@@ -430,6 +433,10 @@ function renderBuilder() {
       <button type="button" class="b-icon none" data-upg="-1" aria-pressed="${build.up[openSlot] === null}" aria-label="${esc(t("b.none"))}" title="${esc(t("b.none"))}"><span aria-hidden="true">∅</span></button>
       ${list.map((i) => { const u = BUILD.upgrades[i]; return `<button type="button" class="b-icon" data-upg="${i}" aria-pressed="${build.up[openSlot] === i}" aria-label="${esc(L(u.t))}" title="${esc(L(u.t))}">${u.icon ? img("upgrades/" + u.icon) : esc(L(u.t))}</button>`; }).join("")}</div>`;
   } else { $("bSlotPick").hidden = true; $("bSlotPick").innerHTML = ""; }
+
+  // Verbrauchsmaterial: je Slot die Varianten als Icons
+  $("bCons").innerHTML = (sb.c || []).map((opts, slot) => `<div class="b-consrow" role="group" aria-label="${esc(t("b.slot", { n: slot + 1 }))}">${opts.map((c, i) =>
+    `<button type="button" class="b-icon cons${build.cs[slot] === i ? " on" : ""}" data-cslot="${slot}" data-copt="${i}" aria-pressed="${build.cs[slot] === i}" aria-label="${esc(L(c.t))}" title="${esc(L(c.t))}">${img("consumables/" + c.a)}</button>`).join("")}</div>`).join("") || `<p class="mini">–</p>`;
 
   // Kommandant: Raster 4 Kostenstufen × 6 Spalten wie im Spiel
   const grid = BUILD.skills.filter((k) => k.grid[cls]).sort((a, b) => a.grid[cls][0] - b.grid[cls][0] || a.grid[cls][1] - b.grid[cls][1]);
@@ -473,6 +480,28 @@ function renderBuildStats(s, sb, def) {
     dock += `<span class="dock-item ${cls}">${esc(t(key))}: ${esc(txt(b))} <b>${esc(pctTxt)}</b></span>`;
   }
   flush();
+  // Verbrauchsmaterial: Ladungen (mehr ist besser), Dauer (länger ist besser), Ladezeit (kürzer ist besser)
+  const cb = computeConsumables(sb, build.cs, [], s.type), cc = computeConsumables(sb, build.cs, chosenMods(s), s.type);
+  group = `<tr class="grp"><th scope="colgroup" colspan="4">${esc(t("b.consumables"))}</th></tr>`;
+  const charges = (n) => (n === -1 ? "∞" : n === null || n === undefined ? null : fmt.format(n));
+  cc.forEach((c, i) => {
+    const b0 = cb[i];
+    for (const [k, dir, fmtv] of [["n", 1, charges], ["work", 1, (x) => t("u.s", { v: fmt1.format(x) })], ["reload", -1, (x) => t("u.s", { v: fmt1.format(x) })]]) {
+      const a = b0[k], b = c[k];
+      if ((a === null || a === undefined) && (b === null || b === undefined)) continue;
+      const label = `${L(c.t)}: ${t("b.c." + k)}`;
+      const changed = typeof a === "number" && typeof b === "number" && a !== b && a !== -1;
+      if (only && !changed) continue;
+      if (!changed) { groupRows += `<tr><th scope="row">${esc(label)}</th><td class="num">${esc(fmtv(a) ?? "–")}</td><td class="num">${esc(fmtv(b) ?? "–")}</td><td></td></tr>`; continue; }
+      const better = (b > a) === (dir > 0), cls = better ? "up" : "down";
+      const pct = ((b - a) / a) * 100;
+      const pctTxt = k === "n" ? `${b > a ? "+" : "−"}${fmt.format(Math.abs(b - a))}` : `${pct > 0 ? "+" : "−"}${fmt1.format(Math.abs(pct))} %`;
+      groupRows += `<tr class="changed"><th scope="row">${esc(label)}</th><td class="num">${esc(fmtv(a))}</td><td class="num ${cls}">${esc(fmtv(b))}</td>
+        <td class="num"><span class="delta ${cls}">${better ? "▲" : "▼"} ${esc(pctTxt)}</span><span class="visually-hidden"> (${esc(t(better ? "b.better" : "b.worse"))})</span></td></tr>`;
+      dock += `<span class="dock-item ${cls}">${esc(label)}: ${esc(fmtv(b))} <b>${esc(pctTxt)}</b></span>`;
+    }
+  });
+  flush();
   $("bStats").innerHTML = rows || `<tr><td colspan="4" class="mini">${esc(t("b.noChanges"))}</td></tr>`;
   $("bDock").innerHTML = dock;
   $("bDock").hidden = !dock;
@@ -490,13 +519,17 @@ function showInfo(el) {
     const k = BUILD.skills.find((x) => x.id === +el.dataset.skill);
     const perks = (k.perks[s.type] && (k.perks[s.type][LANG] || k.perks[s.type].en)) || [];
     html = `<strong>${esc(L(k.t))}</strong> <span class="mini">${esc(t("b.cost", { n: k.grid[s.type][0] }))}${k.cond ? " · " + esc(t("b.cond")) : ""}</span><ul>${perks.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`;
+  } else if (el.dataset.cslot) {
+    const c = BUILD.ships[s.id].c[+el.dataset.cslot][+el.dataset.copt];
+    const n = c.n === -1 ? "∞" : c.n === null ? "–" : fmt.format(c.n);
+    html = `<strong>${esc(L(c.t))}</strong><ul><li>${esc(t("b.c.n"))}: ${esc(n)}</li>${c.work !== null ? `<li>${esc(t("b.c.work"))}: ${esc(t("u.s", { v: fmt1.format(c.work) }))}</li>` : ""}${c.reload !== null ? `<li>${esc(t("b.c.reload"))}: ${esc(t("u.s", { v: fmt1.format(c.reload) }))}</li>` : ""}</ul>`;
   } else if (el.dataset.flag) {
     const f = BUILD.flags[+el.dataset.flag];
     html = `<strong>${esc(L(f.t))}</strong><ul>${effectLines(f.mods, s.type)}</ul>`;
   }
   if (html) $("bInfo").innerHTML = html;
 }
-for (const id of ["bSlotPick", "bSkills", "bFlags"]) {
+for (const id of ["bSlotPick", "bSkills", "bFlags", "bCons"]) {
   $(id).addEventListener("mouseover", (e) => showInfo(e.target.closest("button")));
   $(id).addEventListener("focusin", (e) => showInfo(e.target.closest("button")));
 }
@@ -545,8 +578,15 @@ $("bFlags").addEventListener("click", (e) => {
   renderBuilder();
   $("bFlags").querySelector(`[data-flag="${i}"]`).focus();
 });
+$("bCons").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-cslot]");
+  if (!b) return;
+  build.cs[+b.dataset.cslot] = +b.dataset.copt;
+  renderBuilder();
+  $("bCons").querySelector(`[data-cslot="${b.dataset.cslot}"][data-copt="${b.dataset.copt}"]`).focus();
+});
 $("bOnlyChanged").addEventListener("change", () => renderBuilder());
-$("bReset").addEventListener("click", () => { build.sel = null; build.up = EMPTY6(); build.sk = []; build.fl = []; openSlot = null; $("bInfo").innerHTML = ""; renderBuilder(); });
+$("bReset").addEventListener("click", () => { build.sel = null; build.up = EMPTY6(); build.sk = []; build.fl = []; build.cs = []; openSlot = null; $("bInfo").innerHTML = ""; renderBuilder(); });
 $("bShare").addEventListener("click", () => {
   if (!BUILD || !BUILD.ships[build.id]) return;
   const url = `${location.origin}${location.pathname}?b=${shareCode()}#builder`;
@@ -573,7 +613,7 @@ $("bResults").addEventListener("click", (e) => {
   if (!b) return;
   $("bSearch").value = ""; renderBuildPicker();
   // Fähigkeiten und Signale bleiben beim Schiffswechsel erhalten, soweit sie zur Klasse passen
-  build.id = +b.dataset.id; build.sel = null; build.up = EMPTY6(); openSlot = null;
+  build.id = +b.dataset.id; build.sel = null; build.up = EMPTY6(); build.cs = []; openSlot = null;
   renderBuilder();
 });
 

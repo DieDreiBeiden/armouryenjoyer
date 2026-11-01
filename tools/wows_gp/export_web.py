@@ -387,6 +387,33 @@ def skills_and_flags(gp, loc_de, loc_en, assets):
     return skills, flags
 
 
+def consumables(gp, raw, loc_de, loc_en):
+    """Verbrauchsmaterial je Slot: Varianten mit Ladungen (-1 = unbegrenzt), Ladezeit, Wirkdauer."""
+    out = []
+    for slot in sorted((w.to_plain(w._get(raw, "ShipAbilities")) or {}).values(), key=lambda x: x.get("slot", 0)):
+        opts = []
+        for name, var in slot.get("abils") or []:
+            v = w._get(gp.raw(name), var)
+            if v is None:
+                continue
+            key = "IDS_DOCK_CONSUME_TITLE_" + name.upper()
+            opts.append({"a": name, "type": w.to_plain(w._get(v, "consumableType")),
+                         "t": both(loc_de, loc_en, key, name),
+                         "n": num(w._get(v, "numConsumables")) if num(w._get(v, "numConsumables")) is not None else (-1 if w.to_plain(w._get(v, "numConsumables")) == -1 else None),
+                         "reload": num(w._get(v, "reloadTime")), "work": num(w._get(v, "workTime"))})
+        if opts:
+            out.append(opts)
+    return out
+
+
+def consumable_keys(types):
+    """Modifikatoren, die Verbrauchsmaterial eindeutig verändern (allgemein und je Art)."""
+    keys = {"ConsumableReloadTime", "ConsumablesWorkTime", "additionalConsumables"}
+    for t in types:
+        keys |= {t + "ReloadCoeff", t + "WorkTimeCoeff", t + "AdditionalConsumables"}
+    return keys
+
+
 def build_builder(gp, data, loc_de, loc_en, assets=None):
     mods = [(str(n), r) for n, r in gp.iter(type_="Modernization")]
     upg = []
@@ -426,8 +453,10 @@ def build_builder(gp, data, loc_de, loc_en, assets=None):
                 sl = num(w._get(m, "slot"))
                 if sl is not None and 0 <= sl < 6:
                     slots[sl].append(i)
-        ships[str(s["id"])] = {"o": module_options(gp, raw, loc_de, loc_en), "up": slots}
-    return {"version": data["version"], "applied": sorted(APPLIED), "labels": labels, "upgrades": upg,
+        ships[str(s["id"])] = {"o": module_options(gp, raw, loc_de, loc_en), "up": slots, "c": consumables(gp, raw, loc_de, loc_en)}
+    ctypes = {o["type"] for sb in ships.values() for slot in sb["c"] for o in slot if o["type"]}
+    applied = APPLIED | {k for k in consumable_keys(ctypes) if k in keys}
+    return {"version": data["version"], "applied": sorted(applied), "labels": labels, "upgrades": upg,
             "skills": skills, "flags": flags, "ships": ships}
 
 

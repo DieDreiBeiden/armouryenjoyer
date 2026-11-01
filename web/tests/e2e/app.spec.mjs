@@ -148,6 +148,15 @@ test("Shipbuilder: Module, Upgrade, Fähigkeiten und Signale ändern Werte, Link
   await expect(page.locator("#bPoints")).toHaveText("1 / 21 Punkte");
   await expect(page.locator('#bSkills button[style*="grid-row:2;"]').first()).toHaveAttribute("aria-disabled", "false");
 
+  // Verbrauchsmaterial: Icons je Slot; Upgrade „Schiffsverbrauchsmaterial-Modifikation 1“ verlängert die Wirkdauer
+  await expect(page.locator("#bCons button img").first()).toBeVisible();
+  const workRow = page.locator("#bStats tr", { has: page.locator("th", { hasText: /^Nebelerzeuger: Wirkdauer$/ }) });
+  await expect(workRow.locator("td").nth(1)).toHaveText("20 s");
+  await page.locator("#bSlots button").nth(4).click();
+  await page.locator("#bSlotPick button").and(page.locator('[aria-label*="Schiffsverbrauchs"]')).click();
+  await expect(workRow.locator("td").nth(1)).toHaveText("22 s");
+  await expect(workRow).toHaveClass(/changed/);
+
   // Signal
   await page.locator("#bFlags button").first().click();
   await expect(page.locator("#bFlagCount")).toHaveText("1 / 8");

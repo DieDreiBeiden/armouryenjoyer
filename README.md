@@ -40,6 +40,6 @@ Details: [tools/wows_gp/README.md](tools/wows_gp/README.md)
 
 ## Regeln
 
-- Keine Spieldateien und keine daraus extrahierten Rohdaten einchecken (`data/` ist ignoriert). Eingecheckt wird nur `web/data/ships.json` mit den Werten, die die Seite anzeigt.
+- Keine Spieldateien und keine daraus extrahierten Rohdaten einchecken (`data/` ist ignoriert). Eingecheckt werden nur die aufbereiteten Daten, die die Seite anzeigt (`web/data/*.json`), und verkleinerte Icons (`web/assets/img/`).
 - Keine Supertest-Daten (NDA) verarbeiten oder veröffentlichen. Öffentliche Testschiffe nur ohne Werte.
 - Keinen dekompilierten Client-Code einchecken.

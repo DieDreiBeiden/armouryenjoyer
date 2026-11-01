@@ -355,3 +355,11 @@ label.sm-check input { width: 18px; height: 18px; accent-color: var(--sea); }
   .b-slots { gap: 4px; } .b-skills, .b-flags { gap: 3px; }
   .b-flags { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
+.b-cons { display: grid; gap: 6px; }
+.b-consrow { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--rule); }
+.b-consrow:last-child { border-bottom: 0; }
+.b-icon.cons { width: 56px; background: transparent; border-color: transparent; }
+.b-icon.cons img { opacity: .55; }
+.b-icon.cons.on { border-color: var(--sea); background: var(--raised); }
+.b-icon.cons.on img { opacity: 1; }
+

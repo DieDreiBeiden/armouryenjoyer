@@ -98,3 +98,29 @@ function computeBuild(sb, sel, mods, species) {
   p.aa = mergeAura([hull && hull.aura, art && art.aura], F("AAAuraDamage"));
   return p;
 }
+
+// Verbrauchsmaterial: gewählte Variante je Slot mit Ladungen, Ladezeit, Wirkdauer nach Modifikatoren.
+// Ladezeit und Dauer: Faktoren (allgemein und je Art), Ladungen: Zuschläge; -1 = unbegrenzt.
+function computeConsumables(sb, choice, mods, species) {
+  const F = (key) => factor(mods || [], key, species);
+  const A = (key) => {
+    let sum = 0;
+    for (const m of mods || []) {
+      const v = m && m[key];
+      const x = typeof v === "object" && v !== null ? v[species] : v;
+      if (typeof x === "number") sum += x;
+    }
+    return sum;
+  };
+  return (sb.c || []).map((opts, slot) => {
+    const c = opts[(choice && choice[slot]) || 0] || opts[0];
+    const ty = c.type || "";
+    return {
+      a: c.a, t: c.t, type: ty,
+      n: typeof c.n === "number" && c.n > 0 ? c.n + A("additionalConsumables") + A(ty + "AdditionalConsumables") : c.n,
+      reload: c.reload !== null ? r(c.reload * F("ConsumableReloadTime") * F(ty + "ReloadCoeff"), 1) : null,
+      work: c.work !== null ? r(c.work * F("ConsumablesWorkTime") * F(ty + "WorkTimeCoeff"), 1) : null
+    };
+  });
+}
+

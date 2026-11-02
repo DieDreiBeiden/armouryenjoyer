@@ -23,6 +23,8 @@
   --gutter: max(16px, env(safe-area-inset-left, 0px));
   --gutter-r: max(16px, env(safe-area-inset-right, 0px));
   --tap: 40px;
+  /* Weiße Spiel-Icons (Kommandant, Modultypen) brauchen im hellen Schema eine dunkle Kachel */
+  --icon-tile: #1d2c37; --icon-tile-on: #2b4352;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -30,6 +32,7 @@
     --paper: #08141c; --sheet: #0d1f2b; --raised: #12293a; --sunk: #0b1822; --ink: #e3eef2; --ink-soft: #9db4c0;
     --rule: #1f3a4a; --rule-strong: #2c4d60; --sea: #7fe3f5; --brass: #e8b44a; --brass-soft: #3a2f17; --on-brass: #1b1305;
     --good: #6cc48d; --warn: #ef8a5c; --eu: #45bad6; --na: #f2708e; --asia: #f0a24a; --shadow: none;
+    --icon-tile: transparent; --icon-tile-on: #12293a;
     color-scheme: dark;
   }
 }
@@ -37,6 +40,7 @@
   --paper: #08141c; --sheet: #0d1f2b; --raised: #12293a; --sunk: #0b1822; --ink: #e3eef2; --ink-soft: #9db4c0;
   --rule: #1f3a4a; --rule-strong: #2c4d60; --sea: #7fe3f5; --brass: #e8b44a; --brass-soft: #3a2f17; --on-brass: #1b1305;
   --good: #6cc48d; --warn: #ef8a5c; --eu: #45bad6; --na: #f2708e; --asia: #f0a24a; --shadow: none;
+  --icon-tile: transparent; --icon-tile-on: #12293a;
   color-scheme: dark;
 }
 @media (pointer: coarse), (max-width: 640px) { :root { --tap: 44px; } }
@@ -426,3 +430,28 @@ tr.ammo-first > th, tr.ammo-first > td { border-top: 2px solid var(--rule-strong
 .b-tip .b-effects { list-style: none; padding-left: 0; }
 .b-tip .b-effects .dia { color: var(--sea); margin-right: 4px; }
 .b-tip { max-width: min(380px, calc(100vw - 16px)); }
+
+/* Spiel-Icons auf Kachel (im dunklen Schema unsichtbar, im hellen dunkel) */
+.b-icon.skill { background: var(--icon-tile); }
+.b-icon.skill.on { background: var(--icon-tile-on); }
+.b-modicon { background: var(--icon-tile); }
+
+/* Handy: Wertetabelle als Raster – Name links, Wert rechts, Änderung darunter (kein Abschneiden) */
+@media (max-width: 640px) {
+  .b-table thead { display: none; }
+  .b-table, .b-table tbody { display: block; width: 100%; }
+  .b-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; align-items: center; border-bottom: 1px solid var(--rule); }
+  .b-table tr.grp { display: block; border-bottom: 0; }
+  .b-table tr.grp th { display: block; }
+  .b-table tbody th[scope="row"] { font-size: 13px; white-space: normal; border-bottom: 0; }
+  .b-table tr.changed th[scope="row"] { grid-row: span 2; }
+  .b-table td { border-bottom: 0; }
+  .b-table td.num { white-space: nowrap; padding: 5px 6px; }
+  .b-table tr > td:last-child:empty { display: none; }
+  .b-table tr > td:last-child { grid-column: 2; justify-self: end; padding: 0 6px 5px; }
+  .b-table button.delta { font-size: 11px; padding: 0 4px; min-height: 22px; }
+  .b-table tr.changed { background: var(--raised); }
+  .b-table tr.changed th, .b-table tr.changed td { background: transparent; }
+  .b-table tr.ammo-first { border-top: 2px solid var(--rule-strong); }
+  .b-table tr.ammo-first > th, .b-table tr.ammo-first > td { border-top: 0; }
+}

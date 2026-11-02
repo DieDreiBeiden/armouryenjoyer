@@ -209,7 +209,8 @@ const AA_ZONES = ["far", "medium", "near"];
 const aaZone = (z) => (s) => (s.p.aa && s.p.aa[z] ? s.p.aa[z][1] : null);
 const aaRange = (z) => (s) => (s.p.aa && s.p.aa[z] ? s.p.aa[z][0] : null);
 // [Text, Wert, Anzeige, Richtung (1 = mehr ist besser, -1 = weniger, 0 = nicht vergleichen)]
-const PP_ROWS = new Set(["r.burn", "r.secBurn", "r.tflood"]);
+// Nur additive Chancen (Brand) in Prozentpunkten; Flutungschance wird mit Faktoren verändert → relativ in %
+const PP_ROWS = new Set(["r.burn", "r.secBurn"]);
 // Munitionsart sichtbar machen: Kennzeichen vor der Zeile (Text und Farbe), Klartext für Tooltip und Leiste
 const AMMO = { he: "HE", ap: "AP", sap: "SAP" };
 const ammoTag = (am) => (am ? `<span class="ammo ${am}">${AMMO[am]}</span> ` : "");

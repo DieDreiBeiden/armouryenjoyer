@@ -267,3 +267,21 @@ test.describe("Vergleich mit Builds", () => {
     expect(errors).toEqual([]);
   });
 });
+
+test("Upgrades: Auswahl öffnet beim Überfahren, Klick wählt, Verlassen schließt", async ({ page, isMobile }) => {
+  test.skip(isMobile, "nur mit Maus");
+  const errors = await guard(page);
+  await openSite(page, { lang: "de", build: { id: 4276041424, sel: null, up: [null, null, null, null, null, null], sk: [], fl: [], cs: [] } }, "#builder");
+  await page.locator("#bSlots button").nth(5).hover();
+  await expect(page.locator("#bSlotPick")).toBeVisible();
+  await expect(page.locator("#bSlots button").nth(5)).toHaveAttribute("aria-expanded", "true");
+  await page.locator('#bSlotPick [aria-label*="Hauptbatterie-Modifikation"][aria-label$="3"]').click();
+  await expect(page.locator("#bSlots button").nth(5).locator("img")).toBeVisible();
+  await expect(page.locator("#bSlotPick")).toBeHidden();
+  // Erneut überfahren und weggehen: Auswahl schließt sich
+  await page.locator("#bSlots button").nth(2).hover();
+  await expect(page.locator("#bSlotPick")).toBeVisible();
+  await page.mouse.move(5, 5);
+  await expect(page.locator("#bSlotPick")).toBeHidden();
+  expect(errors).toEqual([]);
+});

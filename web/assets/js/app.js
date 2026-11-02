@@ -704,8 +704,7 @@ function showTip(btn) {
     : d.cslot ? consHtml(s, +d.cslot, +d.copt)
     : d.flag ? flagHtml(s, BUILD.flags[+d.flag])
     : d.mod ? moduleHtml(s, d.mod, d.u)
-    : d.upg !== undefined && +d.upg >= 0 ? upgradeHtml(s, BUILD.upgrades[+d.upg])
-    : d.slot !== undefined && build.up[+d.slot] !== null ? upgradeHtml(s, BUILD.upgrades[build.up[+d.slot]]) : "";
+    : d.upg !== undefined && +d.upg >= 0 ? upgradeHtml(s, BUILD.upgrades[+d.upg]) : "";
   if (!html) { hideTip(true); return; }
   tip.innerHTML = html;
   tip.hidden = false;
@@ -733,7 +732,7 @@ $("bCons").addEventListener("mouseout", (e) => { if (!e.relatedTarget || !$("bTi
 $("bCons").addEventListener("focusin", (e) => { const b = e.target.closest("button[data-cslot]"); if (b) showTip(b); });
 $("bCons").addEventListener("focusout", () => hideTip(true));
 for (const [id, sel] of [["bStats", "button[data-tip]"], ["cmpBody", "button[data-tip]"], ["bSkills", "button[data-skill]"], ["bFlags", "button[data-flag]"],
-  ["bModules", "button[data-mod]"], ["bSlots", "button[data-slot]"], ["bSlotPick", "button[data-upg]"]]) {
+  ["bModules", "button[data-mod]"], ["bSlotPick", "button[data-upg]"]]) {
   $(id).addEventListener("mouseover", (e) => { const b = e.target.closest(sel); if (b) showTip(b); });
   $(id).addEventListener("mouseout", (e) => { if (!e.relatedTarget || !$("bTip").contains(e.relatedTarget)) hideTip(); });
   $(id).addEventListener("focusin", (e) => { const b = e.target.closest(sel); if (b) showTip(b); });
@@ -772,10 +771,37 @@ $("bModules").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-mod]");
   if (b && !b.disabled) { build.sel[b.dataset.mod] = b.dataset.u; renderBuilder(); }
 });
+// Mit Maus: Auswahl öffnet schon beim Überfahren des Slots und bleibt offen, solange der Zeiger
+// auf den Slots oder der Auswahl ist. Touch und Tastatur: wie bisher per Klick.
+const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+let slotTimer = 0, hoverOpen = false;
+$("bSlots").addEventListener("mouseover", (e) => {
+  if (!canHover) return;
+  const b = e.target.closest("button[data-slot]");
+  if (!b || b.disabled) return;
+  clearTimeout(slotTimer);
+  if (openSlot === +b.dataset.slot) return;
+  openSlot = +b.dataset.slot; hoverOpen = true;
+  renderBuilder();
+});
+for (const id of ["bSlots", "bSlotPick"]) {
+  $(id).addEventListener("mouseenter", () => clearTimeout(slotTimer));
+  $(id).addEventListener("mouseleave", () => {
+    if (!canHover || !hoverOpen) return;
+    clearTimeout(slotTimer);
+    slotTimer = setTimeout(() => {
+      if (!hoverOpen || $("bSlotPick").contains(document.activeElement)) return;
+      openSlot = null; hoverOpen = false; hideTip(true);
+      renderBuilder();
+    }, 350);
+  });
+}
 $("bSlots").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-slot]");
   if (!b) return;
-  openSlot = openSlot === +b.dataset.slot ? null : +b.dataset.slot;
+  // Per Überfahren geöffnet: Klick lässt sie offen und springt in die Auswahl
+  if (hoverOpen && openSlot === +b.dataset.slot) hoverOpen = false;
+  else { openSlot = openSlot === +b.dataset.slot ? null : +b.dataset.slot; hoverOpen = false; }
   renderBuilder();
   const first = $("bSlotPick").querySelector('button[aria-pressed="true"]') || $("bSlotPick").querySelector("button");
   if (first) first.focus();
@@ -785,7 +811,7 @@ $("bSlotPick").addEventListener("click", (e) => {
   if (!b || openSlot === null) return;
   const slot = openSlot;
   build.up[slot] = +b.dataset.upg < 0 ? null : +b.dataset.upg;
-  openSlot = null;
+  openSlot = null; hoverOpen = false; hideTip(true);
   renderBuilder();
   $("bSlots").querySelector(`[data-slot="${slot}"]`).focus();
 });

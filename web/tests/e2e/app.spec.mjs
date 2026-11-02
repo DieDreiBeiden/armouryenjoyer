@@ -293,7 +293,7 @@ test("Tooltips rechnen kumulativ mit dem aktuellen Build (Tarnung: Upgrade + Ski
   await page.locator("#bSlots button").first().waitFor();
   for (let i = 0; i < 6; i++) {
     await page.locator("#bSlots button").nth(i).click();
-    const u = page.locator('#bSlotPick button[aria-label="Tarnsystem-Modifikation 1"]');
+    const u = page.locator('#bSlotPick button[aria-label^="Tarnsystem"]');
     if (await u.count()) { await u.click(); break; }
   }
   for (const r of [1, 2, 3]) await page.locator(`#bSkills button[style*="grid-row:${r};"][aria-disabled="false"]`).first().click();

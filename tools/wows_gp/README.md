@@ -36,7 +36,7 @@ Filter (`--nation`, `--type`, `--species`, `--name` als Regex) funktionieren bei
 
 - `ships` nimmt jeweils das Modul mit dem höchsten Buchstaben (`B_Hull` vor `A_Hull`) als Top-Konfiguration. Bei Schiffen mit alternativen Rümpfen oder Waffen (z. B. Wahl zwischen Torpedos und Geschützen) stimmt das nicht unbedingt; dann `ship` verwenden, das alle Module zeigt.
 - Torpedoreichweite: `maxDist` × 30 m (BigWorld-Einheit).
-- Werte sind Basiswerte ohne Kapitän, Module und Tarnung.
+- Werte sind Basiswerte ohne Kapitän und Upgrades. Tarnungen sind im Spiel nur noch kosmetisch und werden nicht ausgewertet.
 - Sicherheit: Der Pickle wird mit einem eingeschränkten Unpickler gelesen. Unbekannte Klassen werden zu Platzhaltern, es wird kein fremder Code ausgeführt. Ein normales `pickle.loads` auf Dateien aus fremden Quellen kann beliebigen Code ausführen.
 
 ## Export für die Seite

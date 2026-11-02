@@ -307,7 +307,7 @@ test("Upgrades: Überfahren wählt den Slot, Klick wählt das Upgrade, Auswahlfl
   expect(errors).toEqual([]);
 });
 
-test("Tooltips rechnen kumulativ mit dem aktuellen Build (Tarnung: Upgrade + Skill)", async ({ page }) => {
+test("Tooltips rechnen kumulativ mit dem aktuellen Build (Sichtbarkeit: Upgrade + Skill)", async ({ page }) => {
   const errors = await guard(page);
   // Shimakaze mit Tarnsystem-Modifikation 1 und Skills der Stufen 1–3
   await openSite(page, { lang: "de", build: { id: 4282267344, sel: null, up: [null, null, null, null, null, null], sk: [], fl: [], cs: [] } }, "#builder");

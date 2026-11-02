@@ -57,7 +57,7 @@ const I18N = {
     "cost.credits": "Credits", "cost.creditsSub": "Schiffe und Module kaufen",
     "cost.path": "Weg: {list}",
     "cost.swap": "Tauschen", "cost.reset": "Zurücksetzen",
-    "cost.note": "Ohne Rabatte, Ausrüstung und Tarnungen; Module nur so weit, wie sie zum Freischalten des nächsten Schiffs nötig sind.",
+    "cost.note": "Ohne Rabatte und Ausrüstung; Module nur so weit, wie sie zum Freischalten des nächsten Schiffs nötig sind.",
 
     "extra.title": "Premium- und Sonderschiffe",
     "extra.count": "{n} Schiffe",
@@ -145,7 +145,7 @@ const I18N = {
     "cost.credits": "Credits", "cost.creditsSub": "buying ships and modules",
     "cost.path": "Path: {list}",
     "cost.swap": "Swap", "cost.reset": "Reset",
-    "cost.note": "Without discounts, equipment and camouflages; modules only as far as needed to unlock the next ship.",
+    "cost.note": "Without discounts and equipment; modules only as far as needed to unlock the next ship.",
 
     "extra.title": "Premium and special ships",
     "extra.count": "{n} ships",

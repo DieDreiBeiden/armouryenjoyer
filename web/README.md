@@ -55,7 +55,7 @@ Reiter „Shipbuilder“: Module je Typ (Rumpf, Hauptbatterie, Torpedos, Antrieb
 
 ## Forschungskosten
 
-Für jeden Schritt A → B: EP für B laut Nachfolgerliste von A, plus EP und Credits der Module auf A, die bis zum B freischaltenden Modul nötig sind, plus Kaufpreis von B. Ohne Rabatte, Ausrüstung und Tarnungen.
+Für jeden Schritt A → B: EP für B laut Nachfolgerliste von A, plus EP und Credits der Module auf A, die bis zum B freischaltenden Modul nötig sind, plus Kaufpreis von B. Ohne Rabatte und Ausrüstung. Tarnungen sind im Spiel nur noch kosmetisch und bringen keine Boni.
 
 ## Tests
 

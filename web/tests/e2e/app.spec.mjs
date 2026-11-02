@@ -285,3 +285,25 @@ test("Upgrades: Auswahl öffnet beim Überfahren, Klick wählt, Verlassen schlie
   await expect(page.locator("#bSlotPick")).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test("Tooltips rechnen kumulativ mit dem aktuellen Build (Tarnung: Upgrade + Skill)", async ({ page }) => {
+  const errors = await guard(page);
+  // Shimakaze mit Tarnsystem-Modifikation 1 und Skills der Stufen 1–3
+  await openSite(page, { lang: "de", build: { id: 4276041424, sel: null, up: [null, null, null, null, null, null], sk: [], fl: [], cs: [] } }, "#builder");
+  await page.locator("#bSlots button").first().waitFor();
+  for (let i = 0; i < 6; i++) {
+    await page.locator("#bSlots button").nth(i).click();
+    const u = page.locator('#bSlotPick button[aria-label="Tarnsystem-Modifikation 1"]');
+    if (await u.count()) { await u.click(); break; }
+  }
+  for (const r of [1, 2, 3]) await page.locator(`#bSkills button[style*="grid-row:${r};"][aria-disabled="false"]`).first().click();
+  const seen = page.locator("#bStats tr", { has: page.locator("th", { hasText: /^Sichtbarkeit von Schiffen$/ }) });
+  await expect(seen.locator("td").first()).toHaveText("6,21 km");
+  // Nicht gewählt: Tooltip zeigt den Wert, der mit dem Skill zusätzlich herauskommt
+  const ce = page.locator('#bSkills button[aria-label^="Tarnungsmeister"]');
+  await ce.hover();
+  await expect(page.locator("#bTip .b-cvals li").first()).toContainText("5,59 km");
+  await ce.click();
+  await expect(seen.locator("td").first()).toHaveText("5,59 km");
+  expect(errors).toEqual([]);
+});

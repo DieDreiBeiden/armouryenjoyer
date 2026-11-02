@@ -665,16 +665,23 @@ function impactList(s, sb, selA, modsA, selB, modsB) {
   cb.forEach((c, i) => { for (const [k, dir] of CONS_VALUES) add(`${L(c.t)}: ${consLabel(k, c.type)}`, ca[i][k], c[k], consVal(k, c[k], c.healPct, c.type), dir, k === "n" || k === "planes" ? "n" : ""); });
   return items;
 }
-// Abschnitt im Tooltip: was ein Upgrade, Skill oder Signal allein an diesem Schiff ändert
-function impactHtml(s, mods, head = "b.impact") {
-  const sb = BUILD.ships[s.id], items = impactList(s, sb, build.sel, [], build.sel, [mods]);
-  return `<p class="b-tiphead">${esc(t(head))}</p>${items.length ? `<ul class="b-cvals">${items.join("")}</ul>` : `<p class="mini">${esc(t("b.noImpact"))}</p>`}`;
+// Abschnitt im Tooltip: Wirkung im aktuellen Build (kumulativ mit allem, was schon gewählt ist).
+// Gewählt: Build ohne das Element → aktueller Build. Nicht gewählt: aktueller Build → Build mit dem Element.
+function impactHtml(s, alt, selected) {
+  const sb = BUILD.ships[s.id], cur = chosenMods(s), other = chosenMods(s, alt);
+  const items = selected ? impactList(s, sb, build.sel, other, build.sel, cur) : impactList(s, sb, build.sel, cur, build.sel, other);
+  return `<p class="b-tiphead">${esc(t(selected ? "b.impactIn" : "b.impactAdd"))}</p>${items.length ? `<ul class="b-cvals">${items.join("")}</ul>` : `<p class="mini">${esc(t("b.noImpact"))}</p>`}`;
 }
-function upgradeHtml(s, u) {
-  return `<strong>${esc(L(u.t))}</strong><ul class="b-perks b-effects">${effectLines(u.mods, s.type)}</ul>${impactHtml(s, u.mods)}`;
+const withToggled = (list, x) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x]);
+// Upgrade aus der Auswahl ersetzt das Upgrade im selben Slot
+function upgradeHtml(s, i) {
+  const u = BUILD.upgrades[i], slot = openSlot !== null ? openSlot : u.slot, selected = build.up[slot] === i;
+  const up = build.up.slice(); up[slot] = selected ? null : i;
+  return `<strong>${esc(L(u.t))}</strong><ul class="b-perks b-effects">${effectLines(u.mods, s.type)}</ul>${impactHtml(s, { ...build, up }, selected)}`;
 }
-function flagHtml(s, f) {
-  return `<strong>${esc(L(f.t))}</strong><ul class="b-perks b-effects">${effectLines(f.mods, s.type)}</ul>${impactHtml(s, f.mods)}`;
+function flagHtml(s, i) {
+  const f = BUILD.flags[i];
+  return `<strong>${esc(L(f.t))}</strong><ul class="b-perks b-effects">${effectLines(f.mods, s.type)}</ul>${impactHtml(s, { ...build, fl: withToggled(build.fl, i) }, build.fl.includes(i))}`;
 }
 // Modul: was sich gegenüber der aktuellen Wahl ändert
 function moduleHtml(s, k, u) {
@@ -691,7 +698,7 @@ function skillHtml(s, k) {
   const why = on ? (canRemove(k.id, cls) ? "" : "b.skillDep")
     : canAdd(k, cls) ? "" : skillPoints(cls) + skillCost(k, cls) > MAX_POINTS ? "b.noPoints" : "b.needTier";
   return `<strong>${esc(L(k.t))}</strong> <span class="mini">${esc(t("b.cost", { n: skillCost(k, cls) }))}${on ? " · " + esc(t("b.skillOn")) : ""}</span>
-    <ul class="b-perks">${perks.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>${k.cond ? `<p class="mini b-cond">${esc(t("b.cond"))}</p>` : ""}${impactHtml(s, k.mods)}${why ? `<p class="mini b-why">${esc(t(why))}</p>` : ""}`;
+    <ul class="b-perks">${perks.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>${k.cond ? `<p class="mini b-cond">${esc(t("b.cond"))}</p>` : ""}${impactHtml(s, { ...build, sk: withToggled(build.sk, k.id) }, on)}${why ? `<p class="mini b-why">${esc(t(why))}</p>` : ""}`;
 }
 function consHtml(s, slot, opt) {
   const c = BUILD.ships[s.id].c[slot][opt];
@@ -710,9 +717,9 @@ function showTip(btn) {
   const html = d.tip ? DELTA_TIPS[d.tip] || ""
     : d.skill ? skillHtml(s, BUILD.skills.find((x) => x.id === +d.skill))
     : d.cslot ? consHtml(s, +d.cslot, +d.copt)
-    : d.flag ? flagHtml(s, BUILD.flags[+d.flag])
+    : d.flag ? flagHtml(s, +d.flag)
     : d.mod ? moduleHtml(s, d.mod, d.u)
-    : d.upg !== undefined && +d.upg >= 0 ? upgradeHtml(s, BUILD.upgrades[+d.upg]) : "";
+    : d.upg !== undefined && +d.upg >= 0 ? upgradeHtml(s, +d.upg) : "";
   if (!html) { hideTip(true); return; }
   tip.innerHTML = html;
   tip.hidden = false;

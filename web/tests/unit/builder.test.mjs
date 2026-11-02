@@ -114,7 +114,7 @@ test("Signale verändern Brand, Flutung, Sekundärartillerie und Heilung", () =>
   // Juliet Whiskey Unaone: Flutungschance der Torpedos ×1,15
   const shima = DATA.ships.find((x) => x.name === "Shimakaze"), sb2 = B.ships[shima.id], sel2 = defaultSelection(sb2);
   const f0 = computeBuild(sb2, sel2, [], shima.type).torp.flood;
-  assert.equal(computeBuild(sb2, sel2, [flag("PCEF019")], shima.type).torp.flood, Math.round(f0 * 1.15));
+  assert.equal(computeBuild(sb2, sel2, [flag("PCEF019")], shima.type).torp.flood, Math.round(f0 * 1.15 * 10) / 10);
 });
 
 test("Kommandant: Sprengmeister, Trägheitszünder und schwere HE-Granaten wirken auf Haupt- und Sekundärbatterie", () => {

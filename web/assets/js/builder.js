@@ -122,7 +122,7 @@ function computeBuild(sb, sel, mods, species) {
       range: tor.range !== null ? r(tor.range * F("torpedoRangeCoefficient"), 1) : null,
       dmg: tor.dmg !== null ? Math.round(tor.dmg * F("torpedoDamageCoeff")) : null,
       speed: tor.speed !== null ? r(tor.speed * F("torpedoSpeedMultiplier"), 1) : null,
-      flood: tor.flood ? Math.round(tor.flood * F("floodChanceFactor")) : null
+      flood: tor.flood ? r(tor.flood * F("floodChanceFactor"), 1) : null
     };
   }
   p.aa = mergeAura([hull && hull.aura, art && art.aura], F("AAAuraDamage"));

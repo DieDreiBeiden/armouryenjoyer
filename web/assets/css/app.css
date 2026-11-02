@@ -455,3 +455,83 @@ tr.ammo-first > th, tr.ammo-first > td { border-top: 2px solid var(--rule-strong
   .b-table tr.ammo-first { border-top: 2px solid var(--rule-strong); }
   .b-table tr.ammo-first > th, .b-table tr.ammo-first > td { border-top: 0; }
 }
+
+/* ---------- Shipbuilder als Werkbank ---------- */
+/* Desktop: links Schiff, Ausrüstungsleiste, Auswahl; rechts Kennzahlen und Werte, klebend und immer sichtbar */
+.bw { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 20px; align-items: start; }
+.bw-main { display: grid; gap: 16px; min-width: 0; }
+.bw-side { position: sticky; top: 64px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; max-height: calc(100vh - 80px); min-width: 0; }
+.bw-side .b-stats { position: static; max-height: none; min-height: 0; }
+
+/* Ausrüstungsleiste */
+.bw-bar { display: flex; flex-wrap: wrap; gap: 12px 20px; padding: 12px; background: var(--sunk); border: 1px solid var(--rule); }
+.bw-eq { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.bw-eqhead { display: inline-flex; align-items: baseline; gap: 6px; min-height: 28px; padding: 0; background: transparent; border: 0; color: var(--ink-soft); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; text-align: left; }
+.bw-eqhead b { font-family: var(--mono); color: var(--ink); letter-spacing: 0; }
+.bw-edit-link { font-size: 12px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--sea); text-decoration: underline; text-underline-offset: 2px; }
+.bw-eq.open .bw-eqhead { color: var(--ink); }
+.bw-eq.open .bw-edit-link { text-decoration: none; font-weight: 700; }
+.bw-eqicons { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 36px; }
+.bw-mini { width: 36px; height: 36px; min-height: 36px; display: grid; place-items: center; padding: 2px; background: transparent; border: 1px solid var(--rule-strong); color: var(--ink-soft); font-size: 16px; }
+.bw-mini img { width: 100%; height: 100%; object-fit: contain; }
+.bw-mini.tile { background: var(--icon-tile); }
+.bw-mini.empty { border-style: dashed; }
+.bw-mini:disabled { opacity: .35; }
+@media (hover: hover) { .bw-mini:not(:disabled):hover, .bw-eqhead:hover .bw-edit-link { border-color: var(--sea); color: var(--ink); } }
+
+/* Auswahlbereich, an die Leiste angedockt */
+.bw-edit { border-color: var(--sea); border-top-width: 3px; }
+.bw-edithead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.bw-edithead h3 { margin: 0; font-family: var(--display); font-size: 18px; letter-spacing: .08em; text-transform: uppercase; }
+.bw-pane { display: grid; gap: 10px; }
+.bw-pane[hidden] { display: none; }
+.bw-edit .b-info { min-height: 0; border-top: 0; padding-top: 0; }
+.bw-edit .b-info:empty { display: none; }
+
+/* Upgrades: Slots klein mit Nummer, Auswahlfläche fest */
+.bw-edit .b-slots { max-width: 480px; }
+.b-slot { position: relative; font-size: 22px; }
+.b-slot em { position: absolute; left: 3px; top: 1px; font-style: normal; font-family: var(--mono); font-size: 10px; color: var(--ink-soft); }
+.b-slot.active { border-color: var(--sea); box-shadow: inset 0 0 0 2px var(--sea); outline: 0; }
+.b-slot[aria-expanded="true"] { outline: 0; }
+.bw-edit .b-slotpick { min-height: 112px; align-content: start; background: var(--sunk); }
+
+/* Verbrauchsmaterial: Slots nebeneinander */
+.bw-edit .b-cons { display: flex; flex-wrap: wrap; gap: 10px 18px; }
+.bw-edit .b-consrow { padding: 0; border: 0; align-items: center; gap: 4px; }
+.b-conslabel { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); margin-right: 2px; }
+
+/* Kommandant: Kostenspalte, gewählt = gefüllte Kachel mit ✓, gesperrt = deutlich abgeblendet */
+.b-skills { grid-template-columns: 28px repeat(6, minmax(0, 1fr)); max-width: 520px; }
+.b-cost { grid-column: 1; display: grid; place-items: center; align-content: center; font-family: var(--mono); font-weight: 700; color: var(--brass); border-right: 2px solid var(--rule-strong); line-height: 1.1; }
+.b-cost small { font-size: 10px; color: var(--ink-soft); font-weight: 500; }
+.b-icon.skill { position: relative; border-color: var(--rule); }
+.b-icon.skill img { opacity: .8; filter: none; }
+.b-icon.skill[aria-disabled="true"]:not(.on) img { opacity: .18; filter: grayscale(1); }
+.b-icon.skill.on { background: color-mix(in srgb, var(--sea) 30%, var(--icon-tile-on)); border-color: var(--sea); }
+.b-check { position: absolute; right: 2px; bottom: 0; font-style: normal; font-size: 12px; font-weight: 700; color: var(--sea); }
+
+/* Kennzahl-Kacheln */
+.bw-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.bw-kpi { background: var(--sheet); border: 1px solid var(--rule); padding: 10px 12px; display: grid; gap: 6px; align-content: start; }
+.bw-kpititle { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); }
+.bw-num { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0 6px; }
+.bw-num .mini { grid-column: 1 / -1; }
+.bw-num strong { font-family: var(--mono); font-size: 20px; font-weight: 600; }
+.bw-num strong.up { color: var(--good); } .bw-num strong.down { color: var(--warn); }
+.bw-num button.delta { font-size: 11px; padding: 0 4px; min-height: 22px; }
+
+@media (max-width: 999px) {
+  .bw { grid-template-columns: minmax(0, 1fr); }
+  .bw-side { position: static; max-height: none; grid-template-rows: auto auto; }
+  .bw-side .b-stats-scroll { overflow: visible; }
+}
+@media (max-width: 480px) {
+  .bw-bar { gap: 10px 14px; padding: 10px; }
+  .bw-mini { width: 32px; height: 32px; min-height: 32px; }
+  .bw-num strong { font-size: 18px; }
+}
+
+/* Overlay im Vergleich */
+.b-dialog .bw-side { top: 76px; max-height: calc(100dvh - 140px); }
+@media (max-width: 999px) { .b-dialog .bw { grid-template-columns: minmax(0, 1fr); } }

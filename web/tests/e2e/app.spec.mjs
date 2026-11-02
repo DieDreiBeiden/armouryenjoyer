@@ -3,6 +3,11 @@ import { createRequire } from "node:module";
 import { guard, openSite } from "./helpers.mjs";
 
 const axeSource = createRequire(import.meta.url)("axe-core").source;
+// Werkbank: Auswahlbereich über die Ausrüstungsleiste öffnen (nur wenn er nicht schon offen ist)
+async function openPane(scope, key) {
+  const h = scope.locator(`#bBar .bw-eqhead[data-pane="${key}"]`);
+  if ((await h.getAttribute("aria-expanded")) !== "true") await h.click();
+}
 
 test("Techbaum: Nation wählen, Start und Ziel setzen, Forschungskosten erscheinen", async ({ page }) => {
   const errors = await guard(page);
@@ -104,7 +109,7 @@ test.describe("Barrierefreiheit", () => {
       await page.locator("#setTo").click();
       for (const v of ["techbaum", "vergleich", "builder"]) {
         await page.goto(`/#${v}`);
-        if (v === "builder") { await page.locator("#bSlots button").first().waitFor(); await page.locator("#bSlots button").nth(5).click(); await page.locator("#bSkills button").first().click(); }
+        if (v === "builder") { await page.locator("#bSlots button").first().waitFor(); await page.locator("#bSlots button").nth(5).click(); await openPane(page, "skills"); await page.locator("#bSkills button").first().click(); }
         await page.addScriptTag({ content: axeSource });
         const res = await page.evaluate(() => window.axe.run(document, {
           runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] },
@@ -119,7 +124,7 @@ test.describe("Barrierefreiheit", () => {
 
 test("Shipbuilder: Module, Upgrade, Fähigkeiten und Signale ändern Werte, Link teilen", async ({ page, context }) => {
   const errors = await guard(page);
-  await openSite(page, { lang: "de", build: null }, "#builder");
+  await openSite(page, { lang: "de", build: null, onlyChanged: false }, "#builder");
   await expect(page.locator("#bMsg")).toContainText("Such oben");
   await page.fill("#bSearch", "shimakaze");
   // Mehrere Treffer (z. B. „[Shimakaze]“): genau die Shimakaze anklicken
@@ -128,12 +133,14 @@ test("Shipbuilder: Module, Upgrade, Fähigkeiten und Signale ändern Werte, Link
   await expect(page.locator("#bStats tr.changed")).toHaveCount(0);
 
   // Torpedomodul wechseln: Werte werden besser und schlechter markiert
+  await openPane(page, "mod");
   await page.locator('#bModules button[data-mod="torpedoes"]').first().click();
   await expect(page.locator("#bStats td.up").first()).toBeVisible();
   await expect(page.locator("#bStats td.down").first()).toBeVisible();
   await page.locator('#bModules button[data-mod="torpedoes"]').last().click();
 
   // Upgrade über den Slot wählen
+  await openPane(page, "up");
   await page.locator("#bSlots button").nth(5).click();
   await expect(page.locator("#bSlots button").nth(5)).toHaveAttribute("aria-expanded", "true");
   await page.locator("#bSlotPick button[aria-label]").filter({ has: page.locator("img") }).and(page.locator('[aria-label*="Hauptbatterie-Modifikation"][aria-label$="3"]')).click();
@@ -143,6 +150,7 @@ test("Shipbuilder: Module, Upgrade, Fähigkeiten und Signale ändern Werte, Link
   await expect(page.locator("#bSlots button").nth(5).locator("img")).toBeVisible();
 
   // Kommandant: Stufe 4 ohne Voraussetzung gesperrt, Punkte zählen mit
+  await openPane(page, "skills");
   await expect(page.locator('#bSkills button[style*="grid-row:4;"]').first()).toHaveAttribute("aria-disabled", "true");
   // Tooltip: Wirkung laut Spiel und Grund, warum die Fähigkeit gesperrt ist
   await page.locator('#bSkills button[style*="grid-row:4;"]').first().hover();
@@ -151,23 +159,28 @@ test("Shipbuilder: Module, Upgrade, Fähigkeiten und Signale ändern Werte, Link
   await expect(page.locator("#bTip .b-why")).toHaveText("Zuerst eine Fähigkeit der Stufe davor wählen.");
   await page.keyboard.press("Escape");
   // Signal und Modul haben ebenfalls Tooltips mit der Wirkung auf dieses Schiff
+  await openPane(page, "flags");
   await page.locator('#bFlags button[aria-label="Sierra Mike"]').hover();
   await expect(page.locator("#bTip .b-cvals li").first()).toContainText("Höchstgeschwindigkeit");
   await page.keyboard.press("Escape");
+  await openPane(page, "skills");
   await page.locator('#bSkills button[style*="grid-row:1;"]').first().click();
   await expect(page.locator("#bPoints")).toHaveText("1 / 21 Punkte");
   await expect(page.locator('#bSkills button[style*="grid-row:2;"]').first()).toHaveAttribute("aria-disabled", "false");
 
   // Verbrauchsmaterial: Icons je Slot; Upgrade „Schiffsverbrauchsmaterial-Modifikation 1“ verlängert die Wirkdauer
+  await openPane(page, "cons");
   await expect(page.locator("#bCons button img").first()).toBeVisible();
   const workRow = page.locator("#bStats tr", { has: page.locator("th", { hasText: /^Nebelerzeuger: Wirkdauer$/ }) });
   await expect(workRow.locator("td").first()).toHaveText("20 s");
+  await openPane(page, "up");
   await page.locator("#bSlots button").nth(4).click();
   await page.locator("#bSlotPick button").and(page.locator('[aria-label*="Schiffsverbrauchs"]')).click();
   await expect(workRow.locator("td").first()).toHaveText("22 s");
   await expect(workRow).toHaveClass(/changed/);
 
   // Tooltip: Spieltext und Werte, Änderung farbig; Icon markiert; Esc schließt
+  await openPane(page, "cons");
   const smoke = page.locator('#bCons button[aria-label^="Nebelerzeuger"]').first();
   await expect(smoke.locator(".b-mark.up")).toBeVisible();
   await smoke.hover();
@@ -187,8 +200,11 @@ test("Shipbuilder: Module, Upgrade, Fähigkeiten und Signale ändern Werte, Link
   await expect(tip.locator(".b-src li")).toContainText("+10 %");
   await page.keyboard.press("Escape");
 
-  // Signal
+  // Signal; die Ausrüstungsleiste zeigt Signale und Punkte
+  await openPane(page, "flags");
   await page.locator("#bFlags button").first().click();
+  await expect(page.locator('#bBar .bw-eqhead[data-pane="flags"] b')).toHaveText("1/8");
+  await expect(page.locator('#bBar .bw-eqhead[data-pane="skills"] b')).toHaveText("1/21");
   await expect(page.locator("#bFlagCount")).toHaveText("1 / 8");
 
   // „Nur Änderungen“ blendet unveränderte Werte aus
@@ -234,6 +250,7 @@ test.describe("Vergleich mit Builds", () => {
     const dlg = page.locator("#cmpDialog");
     await expect(dlg).toBeVisible();
     await expect(page.locator("#dlgTitle")).toHaveText("Build für Shimakaze");
+    await openPane(dlg, "flags");
     await dlg.locator('#bFlags button[aria-label="Juliet Whiskey Unaone"]').click();
 
     // Barrierefreiheit bei offenem Overlay
@@ -250,7 +267,7 @@ test.describe("Vergleich mit Builds", () => {
     // Flutungschance: Spalte ohne Build unverändert, Spalte mit Build grün mit Änderung
     const flood = page.locator("#cmpBody tr", { has: page.locator("th", { hasText: /^Flutungschance$/ }) });
     await expect(flood.locator("td").nth(0)).toHaveText("361 %");
-    await expect(flood.locator("td").nth(1).locator(".cv.up")).toHaveText("415 %");
+    await expect(flood.locator("td").nth(1).locator(".cv.up")).toHaveText("415,2 %");
     await flood.locator("button.delta").hover();
     await expect(page.locator("#bTip .b-src li")).toContainText("Juliet Whiskey Unaone");
     await page.keyboard.press("Escape");
@@ -268,21 +285,25 @@ test.describe("Vergleich mit Builds", () => {
   });
 });
 
-test("Upgrades: Auswahl öffnet beim Überfahren, Klick wählt, Verlassen schließt", async ({ page, isMobile }) => {
+test("Upgrades: Überfahren wählt den Slot, Klick wählt das Upgrade, Auswahlfläche bleibt stehen", async ({ page, isMobile }) => {
   test.skip(isMobile, "nur mit Maus");
   const errors = await guard(page);
   await openSite(page, { lang: "de", build: { id: 4276041424, sel: null, up: [null, null, null, null, null, null], sk: [], fl: [], cs: [] } }, "#builder");
   await page.locator("#bSlots button").nth(5).hover();
-  await expect(page.locator("#bSlotPick")).toBeVisible();
   await expect(page.locator("#bSlots button").nth(5)).toHaveAttribute("aria-expanded", "true");
+  const top = () => page.locator("#bSlotPick").evaluate((el) => Math.round(el.getBoundingClientRect().top + window.scrollY));
+  const before = await top();
   await page.locator('#bSlotPick [aria-label*="Hauptbatterie-Modifikation"][aria-label$="3"]').click();
   await expect(page.locator("#bSlots button").nth(5).locator("img")).toBeVisible();
-  await expect(page.locator("#bSlotPick")).toBeHidden();
-  // Erneut überfahren und weggehen: Auswahl schließt sich
+  // Leiste zeigt das Upgrade ebenfalls
+  await expect(page.locator("#bBar [data-open-slot=\"5\"] img")).toBeVisible();
   await page.locator("#bSlots button").nth(2).hover();
-  await expect(page.locator("#bSlotPick")).toBeVisible();
-  await page.mouse.move(5, 5);
-  await expect(page.locator("#bSlotPick")).toBeHidden();
+  await expect(page.locator("#bSlots button").nth(2)).toHaveAttribute("aria-expanded", "true");
+  // Auswahlfläche verschiebt sich nicht
+  expect(await top()).toBe(before);
+  // Upgrade-Icon in der Leiste öffnet direkt diesen Slot
+  await page.locator("#bBar [data-open-slot=\"5\"]").click();
+  await expect(page.locator("#bSlots button").nth(5)).toHaveAttribute("aria-expanded", "true");
   expect(errors).toEqual([]);
 });
 
@@ -296,6 +317,7 @@ test("Tooltips rechnen kumulativ mit dem aktuellen Build (Tarnung: Upgrade + Ski
     const u = page.locator('#bSlotPick button[aria-label^="Tarnsystem"]');
     if (await u.count()) { await u.click(); break; }
   }
+  await openPane(page, "skills");
   for (const r of [1, 2, 3]) await page.locator(`#bSkills button[style*="grid-row:${r};"][aria-disabled="false"]`).first().click();
   const seen = page.locator("#bStats tr", { has: page.locator("th", { hasText: /^Sichtbarkeit von Schiffen$/ }) });
   await expect(seen.locator("td").first()).toHaveText("6,21 km");

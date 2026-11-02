@@ -251,7 +251,7 @@ const ROWS = [
   ["r.tdmg", (s) => (torp(s) ? torp(s).dmg : null), (x) => fmt.format(x), 1],
   ["r.tspeed", (s) => (torp(s) ? torp(s).speed : null), (x) => t("u.kn", { v: fmt.format(x) }), 1],
   ["r.tseen", (s) => (torp(s) ? torp(s).seen : null), (x) => t("u.km", { v: fmt2.format(x) }), -1],
-  ["r.tflood", (s) => (torp(s) && torp(s).flood ? torp(s).flood : null), (x) => t("u.pct", { v: fmt.format(x) }), 1],
+  ["r.tflood", (s) => (torp(s) && torp(s).flood ? torp(s).flood : null), (x) => t("u.pct", { v: fmt1.format(x) }), 1],
   ["g.aa"],
   ["r.aa0", aaZone("far"), (x) => t("u.dps", { v: fmt.format(x) }), 1],
   ["r.aa0r", aaRange("far"), (x) => t("u.km", { v: fmt1.format(x) }), 1],
@@ -353,6 +353,9 @@ $("cmpHead").addEventListener("click", (e) => { const b = e.target.closest("butt
 // Daten werden erst geladen, wenn der Reiter offen ist.
 // Zustand: Schiff, Modul je Typ, Upgrade je Slot, Kommandantenfähigkeiten (IDs), Signale (Schlüssel).
 let BUILD = null, buildLoading = null, openSlot = null;
+// Werkbank: offener Auswahlbereich (mod | up | cons | skills | flags) oder null
+let pane = "up";
+const PANES = { mod: "b.modules", up: "b.upgrades", cons: "b.consumables", skills: "b.captain", flags: "b.signals" };
 const EMPTY6 = () => [null, null, null, null, null, null];
 const build = Object.assign({ id: null, sel: null, up: EMPTY6(), sk: [], fl: [], cs: [] }, store.get("build", {}) || {});
 if (!Array.isArray(build.cs)) build.cs = [];
@@ -495,6 +498,16 @@ function renderBuilder() {
   build.cs = (sb.c || []).map((opts, slot) => (opts[build.cs[slot]] ? build.cs[slot] : 0));
   saveBuild();
   $("bHead").innerHTML = `<div class="detail-head">${icon(s, "sicon big")}<div><div class="detail-name">${esc(shipName(s))}</div><div class="mini">${esc(ROMAN[s.tier])} · ${esc(typeName(s.type))} · ${esc(nationName(s.nation))}</div></div></div>`;
+  renderBar(s, sb, cls);
+  // Auswahlbereich: nur der gewählte Bereich ist sichtbar
+  $("bEdit").hidden = !pane;
+  if (pane) {
+    $("bEditTitle").textContent = t(PANES[pane]);
+    for (const el of document.querySelectorAll("#bEdit [data-pane]")) el.hidden = el.dataset.pane !== pane;
+  }
+  // Upgrades: immer ein Slot ausgewählt, Auswahlfläche fest darunter (nichts verschiebt sich)
+  if (openSlot === null || !sb.up[openSlot] || !sb.up[openSlot].length) openSlot = sb.up.findIndex((l) => l.length);
+  if (openSlot < 0) openSlot = null;
 
   // Module: je Typ das Typ-Icon und die Varianten als Knöpfe
   $("bModules").innerHTML = BTYPES.filter((k) => sb.o[k]).map((k) => `<div class="b-modrow"><span class="b-modicon" title="${esc(t("b.mod." + k))}">${img("modules/" + MOD_ICON[k], t("b.mod." + k))}</span>
@@ -504,7 +517,7 @@ function renderBuilder() {
   $("bSlots").innerHTML = sb.up.map((list, slot) => {
     const u = build.up[slot] !== null ? BUILD.upgrades[build.up[slot]] : null;
     const label = `${t("b.slot", { n: slot + 1 })}: ${u ? L(u.t) : t("b.empty")}`;
-    return `<button type="button" class="b-slot${u ? " filled" : ""}" data-slot="${slot}" aria-expanded="${openSlot === slot}" aria-label="${esc(label)}"${list.length ? "" : " disabled"}>${u && u.icon ? img("upgrades/" + u.icon) : `<span aria-hidden="true">${list.length ? "+" : "–"}</span>`}</button>`;
+    return `<button type="button" class="b-slot${u ? " filled" : ""}${openSlot === slot ? " active" : ""}" data-slot="${slot}" aria-expanded="${openSlot === slot}" aria-label="${esc(label)}"${list.length ? "" : " disabled"}>${u && u.icon ? img("upgrades/" + u.icon) : `<span aria-hidden="true">${list.length ? "+" : "–"}</span>`}<em aria-hidden="true">${slot + 1}</em></button>`;
   }).join("");
   if (openSlot !== null && sb.up[openSlot] && sb.up[openSlot].length) {
     const list = sb.up[openSlot];
@@ -512,10 +525,10 @@ function renderBuilder() {
     $("bSlotPick").innerHTML = `<div class="b-pickhead">${esc(t("b.slot", { n: openSlot + 1 }))}</div><div class="b-icons">
       <button type="button" class="b-icon none" data-upg="-1" aria-pressed="${build.up[openSlot] === null}" aria-label="${esc(t("b.none"))}" title="${esc(t("b.none"))}"><span aria-hidden="true">∅</span></button>
       ${list.map((i) => { const u = BUILD.upgrades[i]; return `<button type="button" class="b-icon" data-upg="${i}" aria-pressed="${build.up[openSlot] === i}" aria-label="${esc(L(u.t))}">${u.icon ? img("upgrades/" + u.icon) : esc(L(u.t))}</button>`; }).join("")}</div>`;
-  } else { $("bSlotPick").hidden = true; $("bSlotPick").innerHTML = ""; }
+  } else { $("bSlotPick").hidden = false; $("bSlotPick").innerHTML = `<p class="mini">${esc(t("b.noUpgrades"))}</p>`; }
 
   // Verbrauchsmaterial: je Slot die Varianten als Icons
-  $("bCons").innerHTML = (sb.c || []).map((opts, slot) => `<div class="b-consrow" role="group" aria-label="${esc(t("b.slot", { n: slot + 1 }))}">${opts.map((c, i) => {
+  $("bCons").innerHTML = (sb.c || []).map((opts, slot) => `<div class="b-consrow" role="group" aria-label="${esc(t("b.slot", { n: slot + 1 }))}"><span class="b-conslabel" aria-hidden="true">${slot + 1}</span>${opts.map((c, i) => {
     const tr = consTrend(consRows(s, slot, i));
     const mark = tr ? `<span class="b-mark ${tr}" aria-hidden="true">${tr === "up" ? "▲" : tr === "down" ? "▼" : "±"}</span>` : "";
     const label = L(c.t) + (tr ? ` (${t("b.c.changed." + tr)})` : "");
@@ -524,9 +537,9 @@ function renderBuilder() {
 
   // Kommandant: Raster 4 Kostenstufen × 6 Spalten wie im Spiel
   const grid = BUILD.skills.filter((k) => k.grid[cls]).sort((a, b) => a.grid[cls][0] - b.grid[cls][0] || a.grid[cls][1] - b.grid[cls][1]);
-  $("bSkills").innerHTML = grid.map((k) => {
+  $("bSkills").innerHTML = [1, 2, 3, 4].map((r) => `<span class="b-cost" style="grid-row:${r}" aria-hidden="true">${r}<small>P</small></span>`).join("") + grid.map((k) => {
     const on = build.sk.includes(k.id), ok = on ? canRemove(k.id, cls) : canAdd(k, cls);
-    return `<button type="button" class="b-icon skill${on ? " on" : ""}" data-skill="${k.id}" aria-pressed="${on}" aria-disabled="${!ok}" style="grid-row:${k.grid[cls][0]};grid-column:${k.grid[cls][1]}" aria-label="${esc(L(k.t))}, ${esc(t("b.cost", { n: k.grid[cls][0] }))}">${img("skills/" + k.id)}</button>`;
+    return `<button type="button" class="b-icon skill${on ? " on" : ""}" data-skill="${k.id}" aria-pressed="${on}" aria-disabled="${!ok}" style="grid-row:${k.grid[cls][0]};grid-column:${k.grid[cls][1] + 1}" aria-label="${esc(L(k.t))}, ${esc(t("b.cost", { n: k.grid[cls][0] }))}">${img("skills/" + k.id)}${on ? '<i class="b-check" aria-hidden="true">✓</i>' : ""}</button>`;
   }).join("");
   $("bPoints").textContent = t("b.points", { n: skillPoints(cls), max: MAX_POINTS });
 
@@ -538,6 +551,44 @@ function renderBuilder() {
   $("bFlagCount").textContent = t("b.flagCount", { n: build.fl.length, max: MAX_FLAGS });
 
   renderBuildStats(s, sb, def);
+}
+
+// Ausrüstungsleiste: der ganze Build als kleine Icons; Klick öffnet den passenden Auswahlbereich
+function renderBar(s, sb, cls) {
+  const grp = (key, label, count, icons) => `<div class="bw-eq${pane === key ? " open" : ""}">
+    <button type="button" class="bw-eqhead" data-pane="${key}" aria-expanded="${pane === key}" aria-controls="bEdit">${esc(t(label))}${count ? ` <b>${esc(count)}</b>` : ""}<span class="bw-edit-link">${esc(t("b.edit"))}</span></button>
+    <div class="bw-eqicons">${icons}</div></div>`;
+  const mods = BTYPES.filter((k) => sb.o[k]).map((k) => { const o = sb.o[k].find((x) => x.u === build.sel[k]) || sb.o[k][0];
+    return `<button type="button" class="bw-mini tile" data-pane="mod" data-mod="${k}" data-u="${esc(o.u)}" aria-label="${esc(t("b.mod." + k))}: ${esc(L(o.n))}">${img("modules/" + MOD_ICON[k])}</button>`; }).join("");
+  const ups = sb.up.map((list, slot) => { const i = build.up[slot], u = i !== null ? BUILD.upgrades[i] : null;
+    return `<button type="button" class="bw-mini${u ? "" : " empty"}" data-open-slot="${slot}"${u ? ` data-upg="${i}"` : ""} aria-label="${esc(t("b.slot", { n: slot + 1 }))}: ${esc(u ? L(u.t) : t("b.empty"))}"${list.length ? "" : " disabled"}>${u && u.icon ? img("upgrades/" + u.icon) : `<span aria-hidden="true">${list.length ? "+" : "–"}</span>`}</button>`; }).join("");
+  const cons = (sb.c || []).map((opts, slot) => { const c = opts[build.cs[slot]] || opts[0];
+    return `<button type="button" class="bw-mini" data-pane="cons" data-cslot="${slot}" data-copt="${build.cs[slot] || 0}" aria-label="${esc(L(c.t))}">${img("consumables/" + c.a)}</button>`; }).join("");
+  const sks = build.sk.map((id) => BUILD.skills.find((k) => k.id === id)).filter(Boolean).sort((a, b) => a.grid[cls][0] - b.grid[cls][0] || a.grid[cls][1] - b.grid[cls][1])
+    .map((k) => `<button type="button" class="bw-mini tile" data-pane="skills" data-skill="${k.id}" aria-label="${esc(L(k.t))}">${img("skills/" + k.id)}</button>`).join("") || `<span class="mini">${esc(t("b.noneSel"))}</span>`;
+  const fls = build.fl.map((i) => `<button type="button" class="bw-mini" data-pane="flags" data-flag="${i}" aria-label="${esc(L(BUILD.flags[i].t))}">${img("flags/" + BUILD.flags[i].key)}</button>`).join("") || `<span class="mini">${esc(t("b.noneSel"))}</span>`;
+  $("bBar").innerHTML = grp("mod", "b.modules", "", mods) + grp("up", "b.upgrades", "", ups) + grp("cons", "b.consumables", "", cons) +
+    grp("skills", "b.captain", `${skillPoints(cls)}/${MAX_POINTS}`, sks) + grp("flags", "b.signals", `${build.fl.length}/${MAX_FLAGS}`, fls);
+}
+// Kennzahl-Kacheln: die wichtigsten Werte groß, mit Änderung und Quellen-Tooltip
+const KPIS = [["kpi.survival", ["r.hp", "r.seen"]], ["kpi.mobility", ["r.speed", "r.rudder"]], ["kpi.guns", ["r.reload", "r.range"]], ["kpi.torps", ["r.treload", "r.trange"]], ["kpi.aa", ["r.aa0", "r.sec"]]];
+function renderKpis(ctx) {
+  for (const k of Object.keys(DELTA_TIPS)) if (k[0] === "k") delete DELTA_TIPS[k];
+  let n = 0;
+  const byKey = Object.fromEntries(ROWS.filter((r) => r[1]).map((r) => [r[0], r]));
+  const cards = KPIS.map(([title, keys]) => {
+    const items = keys.map((key) => {
+      const [, get, show, dir, am] = byKey[key];
+      const a = get(ctx.base), b = get(ctx.cur);
+      if (b === null || b === undefined) return "";
+      const changed = typeof a === "number" && typeof b === "number" && a !== b;
+      const better = changed && (b > a) === (dir > 0), cls = changed ? (better ? "up" : "down") : "";
+      const kind = PP_ROWS.has(key) ? "pp" : "";
+      return `<div class="bw-num"><span class="mini">${esc(t(key))}</span><strong class="${cls}">${esc(show ? show(b) : b)}</strong>${changed ? deltaCell("k" + n++, rowLabel(key, am), cls, better, deltaText(kind, a, b), partsOf(ctx, get, dir, kind)) : ""}</div>`;
+    }).join("");
+    return items ? `<div class="bw-kpi"><div class="bw-kpititle">${esc(t(title))}</div>${items}</div>` : "";
+  }).filter(Boolean).slice(0, 4);
+  $("bKpis").innerHTML = cards.join("");
 }
 
 // Änderungstext: Chancen in Prozentpunkten, Ladungen als Anzahl, sonst relativ in %
@@ -558,6 +609,7 @@ function deltaCell(id, label, cls, better, txt, parts) {
 // Werte des Builds in einer Spalte, Änderung gegenüber Standard (Top-Module ohne Ausrüstung) farbig dahinter
 function renderBuildStats(s, sb, def) {
   const ctx = diffCtx(s, sb, build), { srcs, all, base, mod, cur, each } = ctx;
+  renderKpis(ctx);
   const only = $("bOnlyChanged").checked;
   for (const k of Object.keys(DELTA_TIPS)) if (k[0] === "d") delete DELTA_TIPS[k];
   let rows = "", group = "", groupRows = "", dock = "", n = 0;
@@ -747,8 +799,8 @@ $("bCons").addEventListener("mouseover", (e) => { const b = e.target.closest("bu
 $("bCons").addEventListener("mouseout", (e) => { if (!e.relatedTarget || !$("bTip").contains(e.relatedTarget)) hideTip(); });
 $("bCons").addEventListener("focusin", (e) => { const b = e.target.closest("button[data-cslot]"); if (b) showTip(b); });
 $("bCons").addEventListener("focusout", () => hideTip(true));
-for (const [id, sel] of [["bStats", "button[data-tip]"], ["cmpBody", "button[data-tip]"], ["bSkills", "button[data-skill]"], ["bFlags", "button[data-flag]"],
-  ["bModules", "button[data-mod]"], ["bSlotPick", "button[data-upg]"]]) {
+for (const [id, sel] of [["bStats", "button[data-tip]"], ["cmpBody", "button[data-tip]"], ["bKpis", "button[data-tip]"], ["bSkills", "button[data-skill]"], ["bFlags", "button[data-flag]"],
+  ["bModules", "button[data-mod]"], ["bSlotPick", "button[data-upg]"], ["bBar", "button[data-upg], button[data-skill], button[data-flag], button[data-cslot], button[data-mod]"]]) {
   $(id).addEventListener("mouseover", (e) => { const b = e.target.closest(sel); if (b) showTip(b); });
   $(id).addEventListener("mouseout", (e) => { if (!e.relatedTarget || !$("bTip").contains(e.relatedTarget)) hideTip(); });
   $(id).addEventListener("focusin", (e) => { const b = e.target.closest(sel); if (b) showTip(b); });
@@ -761,63 +813,23 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("bTip
 window.addEventListener("scroll", () => { if (!$("bTip").hidden) placeTip(); }, { passive: true, capture: true });
 window.addEventListener("resize", () => { if (!$("bTip").hidden) placeTip(); });
 
-// Info zum gerade fokussierten oder überfahrenen Element
-function showInfo(el) {
-  const s = ship(build.id);
-  if (!s || !BUILD || !el) return;
-  let html = "";
-  if (el.dataset.upg !== undefined && +el.dataset.upg >= 0) {
-    const u = BUILD.upgrades[+el.dataset.upg];
-    html = `<strong>${esc(L(u.t))}</strong><ul>${effectLines(u.mods, s.type)}</ul>`;
-  } else if (el.dataset.skill) {
-    html = skillHtml(s, BUILD.skills.find((x) => x.id === +el.dataset.skill));
-  } else if (el.dataset.cslot) {
-    html = consHtml(s, +el.dataset.cslot, +el.dataset.copt);
-  } else if (el.dataset.flag) {
-    const f = BUILD.flags[+el.dataset.flag];
-    html = `<strong>${esc(L(f.t))}</strong><ul>${effectLines(f.mods, s.type)}</ul>`;
-  }
-  if (html) $("bInfo").innerHTML = html;
-}
-for (const id of ["bSlotPick", "bSkills", "bFlags", "bCons"]) {
-  $(id).addEventListener("mouseover", (e) => showInfo(e.target.closest("button")));
-  $(id).addEventListener("focusin", (e) => showInfo(e.target.closest("button")));
-}
 $("bModules").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-mod]");
   if (b && !b.disabled) { build.sel[b.dataset.mod] = b.dataset.u; renderBuilder(); }
 });
-// Mit Maus: Auswahl öffnet schon beim Überfahren des Slots und bleibt offen, solange der Zeiger
-// auf den Slots oder der Auswahl ist. Touch und Tastatur: wie bisher per Klick.
+// Upgrades: Überfahren (Maus) oder Klick wählt den Slot; die Auswahlfläche darunter bleibt fest stehen
 const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-let slotTimer = 0, hoverOpen = false;
 $("bSlots").addEventListener("mouseover", (e) => {
   if (!canHover) return;
   const b = e.target.closest("button[data-slot]");
-  if (!b || b.disabled) return;
-  clearTimeout(slotTimer);
-  if (openSlot === +b.dataset.slot) return;
-  openSlot = +b.dataset.slot; hoverOpen = true;
+  if (!b || b.disabled || openSlot === +b.dataset.slot) return;
+  openSlot = +b.dataset.slot;
   renderBuilder();
 });
-for (const id of ["bSlots", "bSlotPick"]) {
-  $(id).addEventListener("mouseenter", () => clearTimeout(slotTimer));
-  $(id).addEventListener("mouseleave", () => {
-    if (!canHover || !hoverOpen) return;
-    clearTimeout(slotTimer);
-    slotTimer = setTimeout(() => {
-      if (!hoverOpen || $("bSlotPick").contains(document.activeElement)) return;
-      openSlot = null; hoverOpen = false; hideTip(true);
-      renderBuilder();
-    }, 350);
-  });
-}
 $("bSlots").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-slot]");
   if (!b) return;
-  // Per Überfahren geöffnet: Klick lässt sie offen und springt in die Auswahl
-  if (hoverOpen && openSlot === +b.dataset.slot) hoverOpen = false;
-  else { openSlot = openSlot === +b.dataset.slot ? null : +b.dataset.slot; hoverOpen = false; }
+  openSlot = +b.dataset.slot;
   renderBuilder();
   const first = $("bSlotPick").querySelector('button[aria-pressed="true"]') || $("bSlotPick").querySelector("button");
   if (first) first.focus();
@@ -825,12 +837,23 @@ $("bSlots").addEventListener("click", (e) => {
 $("bSlotPick").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-upg]");
   if (!b || openSlot === null) return;
-  const slot = openSlot;
-  build.up[slot] = +b.dataset.upg < 0 ? null : +b.dataset.upg;
-  openSlot = null; hoverOpen = false; hideTip(true);
+  build.up[openSlot] = +b.dataset.upg < 0 ? null : +b.dataset.upg;
+  hideTip(true);
   renderBuilder();
-  $("bSlots").querySelector(`[data-slot="${slot}"]`).focus();
+  const again = $("bSlotPick").querySelector(`[data-upg="${b.dataset.upg}"]`);
+  if (again) again.focus();
 });
+// Leiste: öffnet den Bereich (Upgrade-Icon: direkt diesen Slot); erneuter Klick auf die Überschrift schließt
+$("bBar").addEventListener("click", (e) => {
+  const slotBtn = e.target.closest("[data-open-slot]"), b = e.target.closest("[data-pane]");
+  if (slotBtn) { if (slotBtn.disabled) return; pane = "up"; openSlot = +slotBtn.dataset.openSlot; }
+  else if (b) pane = b.classList.contains("bw-eqhead") && pane === b.dataset.pane ? null : b.dataset.pane;
+  else return;
+  hideTip(true); $("bInfo").innerHTML = "";
+  renderBuilder();
+  if (pane && !$("bEdit").hidden && window.matchMedia("(max-width: 999px)").matches) $("bEdit").scrollIntoView({ block: "nearest" });
+});
+$("bEditClose").addEventListener("click", () => { const was = pane; pane = null; $("bInfo").innerHTML = ""; renderBuilder(); const h = $("bBar").querySelector(`.bw-eqhead[data-pane="${was}"]`); if (h) h.focus(); });
 $("bSkills").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-skill]");
   if (!b) return;
@@ -862,7 +885,8 @@ $("bCons").addEventListener("click", (e) => {
   renderBuilder();
   $("bCons").querySelector(`[data-cslot="${b.dataset.cslot}"][data-copt="${b.dataset.copt}"]`).focus();
 });
-$("bOnlyChanged").addEventListener("change", () => renderBuilder());
+$("bOnlyChanged").checked = store.get("onlyChanged", true);
+$("bOnlyChanged").addEventListener("change", () => { store.set("onlyChanged", $("bOnlyChanged").checked); renderBuilder(); });
 $("bReset").addEventListener("click", () => { build.sel = null; build.up = EMPTY6(); build.sk = []; build.fl = []; build.cs = []; openSlot = null; $("bInfo").innerHTML = ""; renderBuilder(); });
 $("bShare").addEventListener("click", () => {
   if (!BUILD || !BUILD.ships[build.id]) return;

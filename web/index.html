@@ -13,9 +13,9 @@
 <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
 <link rel="preload" href="fonts/barlow-condensed-700-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/ibm-plex-sans-400-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/css/fonts.css?v=20261102-12">
-<link rel="stylesheet" href="assets/css/app.css?v=20261102-12">
-<script src="assets/js/boot.js?v=20261102-12"></script>
+<link rel="stylesheet" href="assets/css/fonts.css?v=20261102-14">
+<link rel="stylesheet" href="assets/css/app.css?v=20261102-14">
+<script src="assets/js/boot.js?v=20261102-14"></script>
 </head>
 <body>
 <a class="skip" href="#main" data-i18n="skip">Zum Inhalt springen</a>
@@ -120,40 +120,37 @@
     <p class="msg" id="bMsg" role="status" aria-live="polite"></p>
   </section>
 
-  <div class="b-layout" id="bBody" hidden>
-    <!-- Werte: auf breiten Bildschirmen klebend, damit sie beim Auswählen sichtbar bleiben -->
-    <section class="panel b-stats" aria-labelledby="bStatTitle">
-      <div id="bHead"></div>
-      <div class="panel-head">
-        <h2 id="bStatTitle" data-i18n="b.stats">Werte</h2>
-        <label class="check sm-check"><input type="checkbox" id="bOnlyChanged"> <span data-i18n="b.onlyChanged">Nur Änderungen</span></label>
-      </div>
-      <div class="b-stats-scroll" tabindex="0" role="region" aria-labelledby="bStatTitle">
-        <table class="b-table"><thead><tr><th scope="col" data-i18n="b.colStat">Eigenschaft</th><th scope="col" class="num" data-i18n="b.colBuild">Wert</th><th scope="col" class="num" data-i18n="b.colDelta">Änderung</th></tr></thead><tbody id="bStats"></tbody></table>
-      </div>
-      <p class="note" data-i18n="b.note"></p>
-    </section>
-
-    <section class="panel b-pick" aria-labelledby="bPickTitle">
-      <h2 id="bPickTitle" class="visually-hidden" data-i18n="b.pickTitle">Ausrüstung</h2>
-      <h3 data-i18n="b.modules">Module</h3>
-      <div id="bModules" class="b-modules"></div>
-
-      <h3 data-i18n="b.upgrades">Upgrades</h3>
-      <div id="bSlots" class="b-slots" role="group" data-i18n-attr="aria-label:b.upgrades"></div>
-      <div id="bSlotPick" class="b-slotpick" hidden></div>
-
-      <h3 data-i18n="b.consumables">Verbrauchsmaterial</h3>
-      <div id="bCons" class="b-cons"></div>
-
-      <div class="b-sub"><h3 data-i18n="b.captain">Kommandant</h3><span class="b-points" id="bPoints" aria-live="polite"></span></div>
-      <div id="bSkills" class="b-skills" role="group" data-i18n-attr="aria-label:b.captain"></div>
-
-      <div class="b-sub"><h3 data-i18n="b.signals">Signale</h3><span class="b-points" id="bFlagCount" aria-live="polite"></span></div>
-      <div id="bFlags" class="b-flags" role="group" data-i18n-attr="aria-label:b.signals"></div>
-
-      <div class="b-info" id="bInfo" aria-live="polite"></div>
-    </section>
+  <!-- Werkbank: links Schiff, Ausrüstungsleiste und Auswahl; rechts Kennzahlen und Werte (klebend, immer sichtbar) -->
+  <div class="bw" id="bBody" hidden>
+    <div class="bw-main">
+      <section class="panel bw-top" aria-labelledby="bEquipTitle">
+        <div id="bHead"></div>
+        <h2 id="bEquipTitle" class="visually-hidden" data-i18n="b.pickTitle">Ausrüstung</h2>
+        <div class="bw-bar" id="bBar"></div>
+      </section>
+      <section class="panel bw-edit" id="bEdit" aria-labelledby="bEditTitle" hidden>
+        <div class="bw-edithead"><h3 id="bEditTitle"></h3><button type="button" class="ghost sm" id="bEditClose" data-i18n="b.done">Fertig</button></div>
+        <div class="bw-pane" data-pane="mod"><div id="bModules" class="b-modules"></div></div>
+        <div class="bw-pane" data-pane="up"><div id="bSlots" class="b-slots" role="group" data-i18n-attr="aria-label:b.upgrades"></div><div id="bSlotPick" class="b-slotpick"></div></div>
+        <div class="bw-pane" data-pane="cons"><div id="bCons" class="b-cons"></div></div>
+        <div class="bw-pane" data-pane="skills"><div class="b-sub"><span class="mini" data-i18n="b.skillHint"></span><span class="b-points" id="bPoints" aria-live="polite"></span></div><div id="bSkills" class="b-skills" role="group" data-i18n-attr="aria-label:b.captain"></div></div>
+        <div class="bw-pane" data-pane="flags"><div class="b-sub"><span></span><span class="b-points" id="bFlagCount" aria-live="polite"></span></div><div id="bFlags" class="b-flags" role="group" data-i18n-attr="aria-label:b.signals"></div></div>
+        <div class="b-info" id="bInfo" aria-live="polite"></div>
+      </section>
+    </div>
+    <aside class="bw-side" aria-labelledby="bStatTitle">
+      <div class="bw-kpis" id="bKpis"></div>
+      <section class="panel b-stats">
+        <div class="panel-head">
+          <h2 id="bStatTitle" data-i18n="b.stats">Werte</h2>
+          <label class="check sm-check"><input type="checkbox" id="bOnlyChanged"> <span data-i18n="b.onlyChanged">Nur Änderungen</span></label>
+        </div>
+        <div class="b-stats-scroll" tabindex="0" role="region" aria-labelledby="bStatTitle">
+          <table class="b-table"><thead><tr><th scope="col" data-i18n="b.colStat">Eigenschaft</th><th scope="col" class="num" data-i18n="b.colBuild">Wert</th><th scope="col" class="num" data-i18n="b.colDelta">Änderung</th></tr></thead><tbody id="bStats"></tbody></table>
+        </div>
+        <p class="note" data-i18n="b.note"></p>
+      </section>
+    </aside>
   </div>
 
   <!-- Handy: geänderte Werte bleiben unten sichtbar -->
@@ -181,9 +178,9 @@
   </footer>
 </div>
 <div class="b-tip" id="bTip" role="tooltip" hidden></div>
-<script src="assets/js/i18n.js?v=20261102-12" defer></script>
-<script src="assets/js/research.js?v=20261102-12" defer></script>
-<script src="assets/js/builder.js?v=20261102-12" defer></script>
-<script src="assets/js/app.js?v=20261102-12" defer></script>
+<script src="assets/js/i18n.js?v=20261102-14" defer></script>
+<script src="assets/js/research.js?v=20261102-14" defer></script>
+<script src="assets/js/builder.js?v=20261102-14" defer></script>
+<script src="assets/js/app.js?v=20261102-14" defer></script>
 </body>
 </html>

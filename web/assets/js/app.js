@@ -515,7 +515,7 @@ function renderBuilder() {
   const grid = BUILD.skills.filter((k) => k.grid[cls]).sort((a, b) => a.grid[cls][0] - b.grid[cls][0] || a.grid[cls][1] - b.grid[cls][1]);
   $("bSkills").innerHTML = grid.map((k) => {
     const on = build.sk.includes(k.id), ok = on ? canRemove(k.id, cls) : canAdd(k, cls);
-    return `<button type="button" class="b-icon skill${on ? " on" : ""}" data-skill="${k.id}" aria-pressed="${on}" aria-disabled="${!ok}" style="grid-row:${k.grid[cls][0]};grid-column:${k.grid[cls][1]}" aria-label="${esc(L(k.t))}, ${esc(t("b.cost", { n: k.grid[cls][0] }))}" title="${esc(L(k.t))}">${img("skills/" + k.id)}</button>`;
+    return `<button type="button" class="b-icon skill${on ? " on" : ""}" data-skill="${k.id}" aria-pressed="${on}" aria-disabled="${!ok}" style="grid-row:${k.grid[cls][0]};grid-column:${k.grid[cls][1]}" aria-label="${esc(L(k.t))}, ${esc(t("b.cost", { n: k.grid[cls][0] }))}">${img("skills/" + k.id)}</button>`;
   }).join("");
   $("bPoints").textContent = t("b.points", { n: skillPoints(cls), max: MAX_POINTS });
 
@@ -624,6 +624,15 @@ function consLines(rows) {
     return `<li class="changed"><span class="k">${esc(t("b.c." + r.k))}</span><span class="v"><b class="${cls}">${esc(consVal(r.k, r.b, r.pb))}</b> <span class="delta ${cls}">${r.better ? "▲" : "▼"} ${esc(consDelta(r))}</span><span class="visually-hidden"> (${esc(t(r.better ? "b.better" : "b.worse"))})</span></span></li>`;
   }).join("");
 }
+// Kommandantenfähigkeit: Name, Kosten, Wirkung laut Spiel; dazu, warum sie gerade nicht wählbar ist
+function skillHtml(s, k) {
+  const cls = s.type, perks = (k.perks[cls] && (k.perks[cls][LANG] || k.perks[cls].en)) || [];
+  const on = build.sk.includes(k.id);
+  const why = on ? (canRemove(k.id, cls) ? "" : "b.skillDep")
+    : canAdd(k, cls) ? "" : skillPoints(cls) + skillCost(k, cls) > MAX_POINTS ? "b.noPoints" : "b.needTier";
+  return `<strong>${esc(L(k.t))}</strong> <span class="mini">${esc(t("b.cost", { n: skillCost(k, cls) }))}${on ? " · " + esc(t("b.skillOn")) : ""}</span>
+    <ul class="b-perks">${perks.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>${k.cond ? `<p class="mini b-cond">${esc(t("b.cond"))}</p>` : ""}${why ? `<p class="mini b-why">${esc(t(why))}</p>` : ""}`;
+}
 function consHtml(s, slot, opt) {
   const c = BUILD.ships[s.id].c[slot][opt];
   const d = BUILD.cdesc && BUILD.cdesc[c.a];
@@ -637,7 +646,9 @@ function showTip(btn) {
   const s = ship(build.id), tip = $("bTip");
   if (!BUILD || !btn || (!btn.dataset.tip && !s)) return;
   clearTimeout(tipTimer);
-  tip.innerHTML = btn.dataset.tip ? DELTA_TIPS[btn.dataset.tip] || "" : consHtml(s, +btn.dataset.cslot, +btn.dataset.copt);
+  tip.innerHTML = btn.dataset.tip ? DELTA_TIPS[btn.dataset.tip] || ""
+    : btn.dataset.skill ? skillHtml(s, BUILD.skills.find((x) => x.id === +btn.dataset.skill))
+    : consHtml(s, +btn.dataset.cslot, +btn.dataset.copt);
   tip.hidden = false;
   if (tipFor && tipFor !== btn) tipFor.removeAttribute("aria-describedby");
   tipFor = btn;
@@ -662,10 +673,10 @@ $("bCons").addEventListener("mouseover", (e) => { const b = e.target.closest("bu
 $("bCons").addEventListener("mouseout", (e) => { if (!e.relatedTarget || !$("bTip").contains(e.relatedTarget)) hideTip(); });
 $("bCons").addEventListener("focusin", (e) => { const b = e.target.closest("button[data-cslot]"); if (b) showTip(b); });
 $("bCons").addEventListener("focusout", () => hideTip(true));
-for (const id of ["bStats", "cmpBody"]) {
-  $(id).addEventListener("mouseover", (e) => { const b = e.target.closest("button[data-tip]"); if (b) showTip(b); });
+for (const [id, sel] of [["bStats", "button[data-tip]"], ["cmpBody", "button[data-tip]"], ["bSkills", "button[data-skill]"]]) {
+  $(id).addEventListener("mouseover", (e) => { const b = e.target.closest(sel); if (b) showTip(b); });
   $(id).addEventListener("mouseout", (e) => { if (!e.relatedTarget || !$("bTip").contains(e.relatedTarget)) hideTip(); });
-  $(id).addEventListener("focusin", (e) => { const b = e.target.closest("button[data-tip]"); if (b) showTip(b); });
+  $(id).addEventListener("focusin", (e) => { const b = e.target.closest(sel); if (b) showTip(b); });
   $(id).addEventListener("focusout", () => hideTip(true));
 }
 $("bTip").addEventListener("mouseenter", () => clearTimeout(tipTimer));
@@ -684,9 +695,7 @@ function showInfo(el) {
     const u = BUILD.upgrades[+el.dataset.upg];
     html = `<strong>${esc(L(u.t))}</strong><ul>${effectLines(u.mods, s.type)}</ul>`;
   } else if (el.dataset.skill) {
-    const k = BUILD.skills.find((x) => x.id === +el.dataset.skill);
-    const perks = (k.perks[s.type] && (k.perks[s.type][LANG] || k.perks[s.type].en)) || [];
-    html = `<strong>${esc(L(k.t))}</strong> <span class="mini">${esc(t("b.cost", { n: k.grid[s.type][0] }))}${k.cond ? " · " + esc(t("b.cond")) : ""}</span><ul>${perks.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`;
+    html = skillHtml(s, BUILD.skills.find((x) => x.id === +el.dataset.skill));
   } else if (el.dataset.cslot) {
     html = consHtml(s, +el.dataset.cslot, +el.dataset.copt);
   } else if (el.dataset.flag) {

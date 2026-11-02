@@ -144,6 +144,12 @@ test("Shipbuilder: Module, Upgrade, Fähigkeiten und Signale ändern Werte, Link
 
   // Kommandant: Stufe 4 ohne Voraussetzung gesperrt, Punkte zählen mit
   await expect(page.locator('#bSkills button[style*="grid-row:4;"]').first()).toHaveAttribute("aria-disabled", "true");
+  // Tooltip: Wirkung laut Spiel und Grund, warum die Fähigkeit gesperrt ist
+  await page.locator('#bSkills button[style*="grid-row:4;"]').first().hover();
+  await expect(page.locator("#bTip")).toBeVisible();
+  await expect(page.locator("#bTip .b-perks li").first()).not.toBeEmpty();
+  await expect(page.locator("#bTip .b-why")).toHaveText("Zuerst eine Fähigkeit der Stufe davor wählen.");
+  await page.keyboard.press("Escape");
   await page.locator('#bSkills button[style*="grid-row:1;"]').first().click();
   await expect(page.locator("#bPoints")).toHaveText("1 / 21 Punkte");
   await expect(page.locator('#bSkills button[style*="grid-row:2;"]').first()).toHaveAttribute("aria-disabled", "false");

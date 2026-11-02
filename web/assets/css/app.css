@@ -410,3 +410,9 @@ label.sm-check input { width: 18px; height: 18px; accent-color: var(--sea); }
   .b-dlg-head { padding: 8px 12px; gap: 6px; }
   .b-dlg-head h2 { font-size: 18px; }
 }
+
+/* Tooltip Kommandantenfähigkeit */
+.b-perks { margin: 6px 0 0; padding: 6px 0 0 16px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink); }
+.b-perks li { margin: 2px 0; }
+.b-tip .b-cond { margin: 6px 0 0; color: var(--ink-soft); }
+.b-tip .b-why { margin: 6px 0 0; color: var(--warn); font-weight: 600; }

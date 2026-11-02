@@ -289,7 +289,7 @@ test("Upgrades: Auswahl öffnet beim Überfahren, Klick wählt, Verlassen schlie
 test("Tooltips rechnen kumulativ mit dem aktuellen Build (Tarnung: Upgrade + Skill)", async ({ page }) => {
   const errors = await guard(page);
   // Shimakaze mit Tarnsystem-Modifikation 1 und Skills der Stufen 1–3
-  await openSite(page, { lang: "de", build: { id: 4276041424, sel: null, up: [null, null, null, null, null, null], sk: [], fl: [], cs: [] } }, "#builder");
+  await openSite(page, { lang: "de", build: { id: 4282267344, sel: null, up: [null, null, null, null, null, null], sk: [], fl: [], cs: [] } }, "#builder");
   await page.locator("#bSlots button").first().waitFor();
   for (let i = 0; i < 6; i++) {
     await page.locator("#bSlots button").nth(i).click();

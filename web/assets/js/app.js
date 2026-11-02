@@ -435,8 +435,12 @@ function renderBuilder() {
   } else { $("bSlotPick").hidden = true; $("bSlotPick").innerHTML = ""; }
 
   // Verbrauchsmaterial: je Slot die Varianten als Icons
-  $("bCons").innerHTML = (sb.c || []).map((opts, slot) => `<div class="b-consrow" role="group" aria-label="${esc(t("b.slot", { n: slot + 1 }))}">${opts.map((c, i) =>
-    `<button type="button" class="b-icon cons${build.cs[slot] === i ? " on" : ""}" data-cslot="${slot}" data-copt="${i}" aria-pressed="${build.cs[slot] === i}" aria-label="${esc(L(c.t))}" title="${esc(L(c.t))}">${img("consumables/" + c.a)}</button>`).join("")}</div>`).join("") || `<p class="mini">–</p>`;
+  $("bCons").innerHTML = (sb.c || []).map((opts, slot) => `<div class="b-consrow" role="group" aria-label="${esc(t("b.slot", { n: slot + 1 }))}">${opts.map((c, i) => {
+    const tr = consTrend(consRows(s, slot, i));
+    const mark = tr ? `<span class="b-mark ${tr}" aria-hidden="true">${tr === "up" ? "▲" : tr === "down" ? "▼" : "±"}</span>` : "";
+    const label = L(c.t) + (tr ? ` (${t("b.c.changed." + tr)})` : "");
+    return `<button type="button" class="b-icon cons${build.cs[slot] === i ? " on" : ""}" data-cslot="${slot}" data-copt="${i}" aria-pressed="${build.cs[slot] === i}" aria-label="${esc(label)}">${img("consumables/" + c.a)}${mark}</button>`;
+  }).join("")}</div>`).join("") || `<p class="mini">–</p>`;
 
   // Kommandant: Raster 4 Kostenstufen × 6 Spalten wie im Spiel
   const grid = BUILD.skills.filter((k) => k.grid[cls]).sort((a, b) => a.grid[cls][0] - b.grid[cls][0] || a.grid[cls][1] - b.grid[cls][1]);
@@ -507,6 +511,81 @@ function renderBuildStats(s, sb, def) {
   $("bDock").hidden = !dock;
 }
 
+// Verbrauchsmaterial: Werte einer Variante ohne und mit Build.
+// dir: 1 = mehr ist besser (Ladungen, Wirkdauer), -1 = weniger ist besser (Ladezeit)
+const CONS_VALUES = [["n", 1], ["work", 1], ["reload", -1]];
+function consRows(s, slot, opt) {
+  const sb = BUILD.ships[s.id], ch = build.cs.slice();
+  ch[slot] = opt;
+  const a = computeConsumables(sb, ch, [], s.type)[slot], b = computeConsumables(sb, ch, chosenMods(s), s.type)[slot];
+  const out = [];
+  for (const [k, dir] of CONS_VALUES) {
+    const x = a[k], y = b[k];
+    if ((x === null || x === undefined) && (y === null || y === undefined)) continue;
+    const changed = typeof x === "number" && typeof y === "number" && x !== y && x !== -1;
+    out.push({ k, a: x, b: y, changed, better: changed && (y > x) === (dir > 0) });
+  }
+  return out;
+}
+const consVal = (k, v) => (k === "n" ? (v === -1 ? "∞" : v === null || v === undefined ? "–" : fmt.format(v)) : v === null || v === undefined ? "–" : t("u.s", { v: fmt1.format(v) }));
+const consDelta = (r) => (r.k === "n" ? `${r.b > r.a ? "+" : "−"}${fmt.format(Math.abs(r.b - r.a))}` : `${r.b > r.a ? "+" : "−"}${fmt1.format(Math.abs(((r.b - r.a) / r.a) * 100))} %`);
+// Gesamtrichtung für die Markierung am Icon: nur besser, nur schlechter oder gemischt
+function consTrend(rows) {
+  const ch = rows.filter((r) => r.changed);
+  if (!ch.length) return "";
+  return ch.every((r) => r.better) ? "up" : ch.every((r) => !r.better) ? "down" : "mix";
+}
+function consLines(rows) {
+  return rows.map((r) => {
+    if (!r.changed) return `<li><span class="k">${esc(t("b.c." + r.k))}</span><span class="v">${esc(consVal(r.k, r.b))}</span></li>`;
+    const cls = r.better ? "up" : "down";
+    return `<li class="changed"><span class="k">${esc(t("b.c." + r.k))}</span><span class="v"><span class="was">${esc(consVal(r.k, r.a))}</span> → <b class="${cls}">${esc(consVal(r.k, r.b))}</b> <span class="delta ${cls}">${r.better ? "▲" : "▼"} ${esc(consDelta(r))}</span><span class="visually-hidden"> (${esc(t(r.better ? "b.better" : "b.worse"))})</span></span></li>`;
+  }).join("");
+}
+function consHtml(s, slot, opt) {
+  const c = BUILD.ships[s.id].c[slot][opt];
+  const d = BUILD.cdesc && BUILD.cdesc[c.a];
+  const desc = d ? (d[LANG] || d.en).split("\n").map((p) => `<p>${esc(p)}</p>`).join("") : "";
+  return `<strong>${esc(L(c.t))}</strong>${desc ? `<div class="b-desc">${desc}</div>` : ""}<ul class="b-cvals">${consLines(consRows(s, slot, opt))}</ul>`;
+}
+
+// Tooltip am Icon: bleibt offen, solange Zeiger oder Fokus auf Icon oder Tooltip liegt; Esc schließt
+let tipFor = null, tipTimer = 0;
+function showTip(btn) {
+  const s = ship(build.id), tip = $("bTip");
+  if (!s || !BUILD || !btn) return;
+  clearTimeout(tipTimer);
+  tip.innerHTML = consHtml(s, +btn.dataset.cslot, +btn.dataset.copt);
+  tip.hidden = false;
+  if (tipFor && tipFor !== btn) tipFor.removeAttribute("aria-describedby");
+  tipFor = btn;
+  btn.setAttribute("aria-describedby", "bTip");
+  placeTip();
+}
+function placeTip() {
+  const tip = $("bTip"), btn = tipFor;
+  if (!btn || !btn.isConnected) { hideTip(true); return; }
+  const r = btn.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, gap = 8;
+  const left = Math.max(gap, Math.min(r.left + r.width / 2 - w / 2, document.documentElement.clientWidth - w - gap));
+  const below = r.bottom + gap + h <= window.innerHeight || r.top - gap - h < 0;
+  tip.style.left = `${left}px`;
+  tip.style.top = `${below ? r.bottom + gap : r.top - gap - h}px`;
+}
+function hideTip(now) {
+  clearTimeout(tipTimer);
+  const go = () => { $("bTip").hidden = true; if (tipFor) tipFor.removeAttribute("aria-describedby"); tipFor = null; };
+  if (now) go(); else tipTimer = setTimeout(go, 150);
+}
+$("bCons").addEventListener("mouseover", (e) => { const b = e.target.closest("button[data-cslot]"); if (b) showTip(b); });
+$("bCons").addEventListener("mouseout", (e) => { if (!e.relatedTarget || !$("bTip").contains(e.relatedTarget)) hideTip(); });
+$("bCons").addEventListener("focusin", (e) => { const b = e.target.closest("button[data-cslot]"); if (b) showTip(b); });
+$("bCons").addEventListener("focusout", () => hideTip(true));
+$("bTip").addEventListener("mouseenter", () => clearTimeout(tipTimer));
+$("bTip").addEventListener("mouseleave", () => hideTip());
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("bTip").hidden) hideTip(true); });
+window.addEventListener("scroll", () => { if (!$("bTip").hidden) placeTip(); }, { passive: true, capture: true });
+window.addEventListener("resize", () => { if (!$("bTip").hidden) placeTip(); });
+
 // Info zum gerade fokussierten oder überfahrenen Element
 function showInfo(el) {
   const s = ship(build.id);
@@ -520,9 +599,7 @@ function showInfo(el) {
     const perks = (k.perks[s.type] && (k.perks[s.type][LANG] || k.perks[s.type].en)) || [];
     html = `<strong>${esc(L(k.t))}</strong> <span class="mini">${esc(t("b.cost", { n: k.grid[s.type][0] }))}${k.cond ? " · " + esc(t("b.cond")) : ""}</span><ul>${perks.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`;
   } else if (el.dataset.cslot) {
-    const c = BUILD.ships[s.id].c[+el.dataset.cslot][+el.dataset.copt];
-    const n = c.n === -1 ? "∞" : c.n === null ? "–" : fmt.format(c.n);
-    html = `<strong>${esc(L(c.t))}</strong><ul><li>${esc(t("b.c.n"))}: ${esc(n)}</li>${c.work !== null ? `<li>${esc(t("b.c.work"))}: ${esc(t("u.s", { v: fmt1.format(c.work) }))}</li>` : ""}${c.reload !== null ? `<li>${esc(t("b.c.reload"))}: ${esc(t("u.s", { v: fmt1.format(c.reload) }))}</li>` : ""}</ul>`;
+    html = consHtml(s, +el.dataset.cslot, +el.dataset.copt);
   } else if (el.dataset.flag) {
     const f = BUILD.flags[+el.dataset.flag];
     html = `<strong>${esc(L(f.t))}</strong><ul>${effectLines(f.mods, s.type)}</ul>`;

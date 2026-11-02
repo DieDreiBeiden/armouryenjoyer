@@ -166,5 +166,16 @@ class TestLocalization(unittest.TestCase):
             self.assertIsNone(loc.get("IDS_FEHLT"))
 
 
+class TestConsumableText(unittest.TestCase):
+    def test_absaetze_und_fallback(self):
+        import export_web
+        de = {"IDS_DOCK_CONSUME_DESCRIPTION_PCY009_X": "Löscht Brände.\nRepariert Module.\n\nBegrenzte Ladungen."}
+        en = {}
+        self.assertEqual(export_web.consumable_desc(de, en, "PCY009_X"),
+                         {"de": "Löscht Brände. Repariert Module.\nBegrenzte Ladungen.",
+                          "en": "Löscht Brände. Repariert Module.\nBegrenzte Ladungen."})
+        self.assertIsNone(export_web.consumable_desc(de, en, "PCY999_FEHLT"))
+
+
 if __name__ == "__main__":
     unittest.main()

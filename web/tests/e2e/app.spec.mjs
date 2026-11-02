@@ -157,6 +157,19 @@ test("Shipbuilder: Module, Upgrade, Fähigkeiten und Signale ändern Werte, Link
   await expect(workRow.locator("td").nth(1)).toHaveText("22 s");
   await expect(workRow).toHaveClass(/changed/);
 
+  // Tooltip: Spieltext und Werte, Änderung farbig; Icon markiert; Esc schließt
+  const smoke = page.locator('#bCons button[aria-label^="Nebelerzeuger"]').first();
+  await expect(smoke.locator(".b-mark.up")).toBeVisible();
+  await smoke.hover();
+  const tip = page.locator("#bTip");
+  await expect(tip).toBeVisible();
+  await expect(tip.locator(".b-desc")).not.toBeEmpty();
+  await expect(tip.locator("li.changed b.up")).toHaveText("22 s");
+  await expect(tip.locator("li.changed .was")).toHaveText("20 s");
+  await expect(smoke).toHaveAttribute("aria-describedby", "bTip");
+  await page.keyboard.press("Escape");
+  await expect(tip).toBeHidden();
+
   // Signal
   await page.locator("#bFlags button").first().click();
   await expect(page.locator("#bFlagCount")).toHaveText("1 / 8");

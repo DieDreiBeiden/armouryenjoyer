@@ -362,4 +362,20 @@ label.sm-check input { width: 18px; height: 18px; accent-color: var(--sea); }
 .b-icon.cons img { opacity: .55; }
 .b-icon.cons.on { border-color: var(--sea); background: var(--raised); }
 .b-icon.cons.on img { opacity: 1; }
+.b-icon.cons { position: relative; }
+/* Markierung am Icon, wenn der Build Werte dieses Verbrauchsmaterials ändert */
+.b-mark { position: absolute; top: 1px; right: 1px; min-width: 16px; padding: 0 3px; font-family: var(--mono); font-size: 11px; line-height: 16px; font-weight: 600; background: var(--sheet); border: 1px solid currentColor; }
+.b-mark.up { color: var(--good); } .b-mark.down { color: var(--warn); } .b-mark.mix { color: var(--sea); }
+/* Tooltip am Verbrauchsmaterial */
+.b-tip { position: fixed; z-index: 40; width: max-content; max-width: min(340px, calc(100vw - 16px)); padding: 10px 12px; background: var(--sheet); color: var(--ink); border: 1px solid var(--rule-strong); box-shadow: 0 6px 20px rgba(0, 0, 0, .28); font-size: 14px; }
+.b-tip[hidden] { display: none; }
+.b-desc { margin-top: 4px; color: var(--ink-soft); font-size: 13px; }
+.b-desc p { margin: 0 0 4px; }
+.b-cvals { margin: 6px 0 0; padding: 6px 0 0; list-style: none; border-top: 1px solid var(--rule); font-size: 13px; }
+.b-cvals li { display: flex; justify-content: space-between; gap: 12px; padding: 1px 0; }
+.b-cvals .k { color: var(--ink-soft); }
+.b-cvals .v { font-family: var(--mono); text-align: right; }
+.b-cvals .was { color: var(--ink-soft); text-decoration: line-through; }
+.b-cvals b.up { color: var(--good); } .b-cvals b.down { color: var(--warn); }
+.b-cvals .delta { margin-left: 4px; }
 

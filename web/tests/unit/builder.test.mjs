@@ -83,4 +83,6 @@ test("Verbrauchsmaterial: Rohwerte ohne Effekte, Upgrades verlängern Dauer, jed
   const names = new Set(Object.values(B.ships).flatMap((x) => x.c.flat().map((c) => c.a)));
   const missing = [...names].filter((n) => !fs.existsSync(`${root}assets/img/consumables/${n}.webp`));
   assert.deepEqual(missing, []);
+  // Jedes Verbrauchsmaterial hat einen Spieltext in beiden Sprachen
+  assert.deepEqual([...names].filter((n) => !(B.cdesc[n] && B.cdesc[n].de && B.cdesc[n].en)), []);
 });

@@ -406,6 +406,24 @@ def consumables(gp, raw, loc_de, loc_en):
     return out
 
 
+def paragraphs(loc, key):
+    """Spieltext mit Absätzen (Leerzeile), einfache Zeilenumbrüche werden zu Leerzeichen."""
+    v = loc.get(key) if loc else None
+    if not v:
+        return None
+    parts = [" ".join(x.replace("-\n", "").split()) for x in v.replace("\r", "").split("\n\n")]
+    return "\n".join(x for x in parts if x) or None
+
+
+def consumable_desc(loc_de, loc_en, name):
+    """Beschreibung eines Verbrauchsmaterials aus dem Spieltext; None, wenn es keine gibt."""
+    key = "IDS_DOCK_CONSUME_DESCRIPTION_" + name.upper()
+    de, en = paragraphs(loc_de, key), paragraphs(loc_en, key)
+    if not (de or en):
+        return None
+    return {"de": de or en, "en": en or de}
+
+
 def consumable_keys(types):
     """Modifikatoren, die Verbrauchsmaterial eindeutig verändern (allgemein und je Art)."""
     keys = {"ConsumableReloadTime", "ConsumablesWorkTime", "additionalConsumables"}
@@ -456,8 +474,13 @@ def build_builder(gp, data, loc_de, loc_en, assets=None):
         ships[str(s["id"])] = {"o": module_options(gp, raw, loc_de, loc_en), "up": slots, "c": consumables(gp, raw, loc_de, loc_en)}
     ctypes = {o["type"] for sb in ships.values() for slot in sb["c"] for o in slot if o["type"]}
     applied = APPLIED | {k for k in consumable_keys(ctypes) if k in keys}
+    cdesc = {}
+    for a in sorted({o["a"] for sb in ships.values() for slot in sb["c"] for o in slot}):
+        d = consumable_desc(loc_de, loc_en, a)
+        if d:
+            cdesc[a] = d
     return {"version": data["version"], "applied": sorted(applied), "labels": labels, "upgrades": upg,
-            "skills": skills, "flags": flags, "ships": ships}
+            "skills": skills, "flags": flags, "cdesc": cdesc, "ships": ships}
 
 
 def compare(gp, data, ref_path):

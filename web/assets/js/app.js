@@ -399,12 +399,15 @@ function canRemove(id, cls) {
   });
 }
 
-function chosenMods(s) {
-  const out = build.up.filter((x) => x !== null).map((i) => BUILD.upgrades[i].mods);
-  for (const id of build.sk) { const k = BUILD.skills.find((x) => x.id === id); if (k && k.grid[s.type]) out.push(k.mods); }
-  for (const i of build.fl) if (BUILD.flags[i]) out.push(BUILD.flags[i].mods);
+// Alles, was Werte verändert, mit Herkunft: Upgrades, Kommandant, Signale
+function buildSources(s) {
+  const out = [];
+  for (const i of build.up) if (i !== null) out.push({ kind: "b.upgrades", name: L(BUILD.upgrades[i].t), mods: BUILD.upgrades[i].mods });
+  for (const id of build.sk) { const k = BUILD.skills.find((x) => x.id === id); if (k && k.grid[s.type]) out.push({ kind: "b.captain", name: L(k.t), mods: k.mods }); }
+  for (const i of build.fl) if (BUILD.flags[i]) out.push({ kind: "b.signals", name: L(BUILD.flags[i].t), mods: BUILD.flags[i].mods });
   return out;
 }
+function chosenMods(s) { return buildSources(s).map((x) => x.mods); }
 
 function renderBuilder() {
   if (!BUILD) return;
@@ -466,61 +469,82 @@ function renderBuilder() {
   renderBuildStats(s, sb, def);
 }
 
-// Werte: Standard (Top ohne Upgrades) gegen Build, Änderung in Prozent, farbig
+// Änderungstext: Chancen in Prozentpunkten, Ladungen als Anzahl, sonst relativ in %
+function deltaText(kind, a, b) {
+  const sign = b > a ? "+" : "−";
+  if (kind === "pp") return t("u.pp", { v: sign + fmt1.format(Math.abs(b - a)) });
+  if (kind === "n") return sign + fmt.format(Math.abs(b - a));
+  return `${sign}${fmt1.format(Math.abs(((b - a) / a) * 100))} %`;
+}
+// Tooltip-Inhalte der Änderungen, über data-tip an der Schaltfläche
+let DELTA_TIPS = {};
+function deltaCell(id, label, cls, better, txt, parts) {
+  DELTA_TIPS[id] = `<strong>${esc(label)}</strong><ul class="b-cvals b-src">${parts.map((x) =>
+    `<li><span class="k">${x.kind ? `<span class="src">${esc(t(x.kind))}</span> ` : ""}${esc(x.name)}</span><span class="v"><span class="delta ${x.cls}">${x.better ? "▲" : "▼"} ${esc(x.txt)}</span></span></li>`).join("")}</ul>${parts.length > 1 ? `<p class="mini">${esc(t("b.srcNote"))}</p>` : ""}`;
+  return `<button type="button" class="delta ${cls}" data-tip="${id}">${better ? "▲" : "▼"} ${esc(txt)}<span class="visually-hidden"> (${esc(t(better ? "b.better" : "b.worse"))})</span></button>`;
+}
+
+// Werte des Builds in einer Spalte, Änderung gegenüber Standard (Top-Module ohne Ausrüstung) farbig dahinter
 function renderBuildStats(s, sb, def) {
-  const base = { ...s, p: computeBuild(sb, def, [], s.type) };
-  const cur = { ...s, p: computeBuild(sb, build.sel, chosenMods(s), s.type) };
+  const srcs = buildSources(s), all = srcs.map((x) => x.mods);
+  const P = (sel, mods) => ({ ...s, p: computeBuild(sb, sel, mods, s.type) });
+  const base = P(def, []), mod = P(build.sel, []), cur = P(build.sel, all);
+  const each = srcs.map((x) => P(build.sel, [x.mods]));
   const only = $("bOnlyChanged").checked;
-  let rows = "", group = "", groupRows = "", dock = "";
+  DELTA_TIPS = {};
+  let rows = "", group = "", groupRows = "", dock = "", n = 0;
   const flush = () => { if (groupRows) rows += group + groupRows; groupRows = ""; };
+  // Einzelwirkungen: Modulwahl gegenüber Standard, dann jede Quelle allein auf den gewählten Modulen
+  const partsOf = (get, dir, kind) => {
+    const out = [];
+    const add = (src, a, b) => {
+      if (typeof a !== "number" || typeof b !== "number" || a === b || a === -1) return;
+      const better = (b > a) === (dir > 0);
+      out.push({ ...src, better, cls: better ? "up" : "down", txt: deltaText(kind, a, b) });
+    };
+    add({ kind: "", name: t("b.modules") }, get(base), get(mod));
+    srcs.forEach((x, i) => add(x, get(mod), get(each[i])));
+    return out;
+  };
+  const row = (label, a, b, txt, dir, kind, get) => {
+    const changed = typeof a === "number" && typeof b === "number" && a !== b && a !== -1;
+    if (only && !changed) return;
+    if (!changed) { groupRows += `<tr><th scope="row">${esc(label)}</th><td class="num">${esc(txt(b))}</td><td></td></tr>`; return; }
+    const better = (b > a) === (dir > 0), cls = better ? "up" : "down", d = deltaText(kind, a, b);
+    groupRows += `<tr class="changed"><th scope="row">${esc(label)}</th><td class="num ${cls}">${esc(txt(b))}</td>
+      <td class="num">${deltaCell("d" + n++, label, cls, better, d, partsOf(get, dir, kind))}</td></tr>`;
+    dock += `<span class="dock-item ${cls}">${esc(label)}: ${esc(txt(b))} <b>${esc(d)}</b></span>`;
+  };
   for (const [key, get, show, dir] of ROWS) {
-    if (!get) { flush(); group = `<tr class="grp"><th scope="colgroup" colspan="4">${esc(t(key))}</th></tr>`; continue; }
+    if (!get) { flush(); group = `<tr class="grp"><th scope="colgroup" colspan="3">${esc(t(key))}</th></tr>`; continue; }
     if (!dir) continue;
     const a = get(base), b = get(cur);
     if (a === null && b === null) continue;
-    const txt = (x) => (x === null ? "–" : show ? show(x) : x);
-    const changed = typeof a === "number" && typeof b === "number" && a !== b;
-    if (only && !changed) continue;
-    if (!changed) { groupRows += `<tr><th scope="row">${esc(t(key))}</th><td class="num">${esc(txt(a))}</td><td class="num">${esc(txt(b))}</td><td></td></tr>`; continue; }
-    const better = (b > a) === (dir > 0), cls = better ? "up" : "down";
-    // Chancen (Angaben in %): Änderung in Prozentpunkten, sonst relativ
-    const pct = a ? ((b - a) / a) * 100 : 0;
-    const pctTxt = PP_ROWS.has(key) ? t("u.pp", { v: `${b > a ? "+" : "−"}${fmt1.format(Math.abs(b - a))}` }) : `${pct > 0 ? "+" : "−"}${fmt1.format(Math.abs(pct))} %`;
-    groupRows += `<tr class="changed"><th scope="row">${esc(t(key))}</th><td class="num">${esc(txt(a))}</td><td class="num ${cls}">${esc(txt(b))}</td>
-      <td class="num"><span class="delta ${cls}">${better ? "▲" : "▼"} ${esc(pctTxt)}</span><span class="visually-hidden"> (${esc(t(better ? "b.better" : "b.worse"))})</span></td></tr>`;
-    dock += `<span class="dock-item ${cls}">${esc(t(key))}: ${esc(txt(b))} <b>${esc(pctTxt)}</b></span>`;
+    row(t(key), a, b, (x) => (x === null ? "–" : show ? show(x) : x), dir, PP_ROWS.has(key) ? "pp" : "", get);
   }
   flush();
-  // Verbrauchsmaterial: Ladungen (mehr ist besser), Dauer (länger ist besser), Ladezeit (kürzer ist besser)
-  const cb = computeConsumables(sb, build.cs, [], s.type, base.p.hp), cc = computeConsumables(sb, build.cs, chosenMods(s), s.type, cur.p.hp);
-  group = `<tr class="grp"><th scope="colgroup" colspan="4">${esc(t("b.consumables"))}</th></tr>`;
-  const charges = (n) => (n === -1 ? "∞" : n === null || n === undefined ? null : fmt.format(n));
+  // Verbrauchsmaterial: Heilung hängt von den Lebenspunkten der jeweiligen Variante ab
+  const C = (x, mods) => computeConsumables(sb, build.cs, mods, s.type, x.p.hp);
+  const cb = C(base, []), cm = C(mod, []), cc = C(cur, all), ce = each.map((x, i) => C(x, [srcs[i].mods]));
+  group = `<tr class="grp"><th scope="colgroup" colspan="3">${esc(t("b.consumables"))}</th></tr>`;
   cc.forEach((c, i) => {
-    const b0 = cb[i];
-    for (const [k, dir, fmtv] of [["n", 1, charges], ["work", 1, (x) => t("u.s", { v: fmt1.format(x) })], ["reload", -1, (x) => t("u.s", { v: fmt1.format(x) })], ["heal", 1, (x) => t("u.hps", { v: fmt.format(x) })]]) {
-      const a = b0[k], b = c[k];
+    for (const [k, dir] of CONS_VALUES) {
+      const a = cb[i][k], b = c[k];
       if ((a === null || a === undefined) && (b === null || b === undefined)) continue;
-      const label = `${L(c.t)}: ${t("b.c." + k)}`;
-      const changed = typeof a === "number" && typeof b === "number" && a !== b && a !== -1;
-      if (only && !changed) continue;
-      if (!changed) { groupRows += `<tr><th scope="row">${esc(label)}</th><td class="num">${esc(fmtv(a) ?? "–")}</td><td class="num">${esc(fmtv(b) ?? "–")}</td><td></td></tr>`; continue; }
-      const better = (b > a) === (dir > 0), cls = better ? "up" : "down";
-      const pct = ((b - a) / a) * 100;
-      const pctTxt = k === "n" ? `${b > a ? "+" : "−"}${fmt.format(Math.abs(b - a))}` : `${pct > 0 ? "+" : "−"}${fmt1.format(Math.abs(pct))} %`;
-      groupRows += `<tr class="changed"><th scope="row">${esc(label)}</th><td class="num">${esc(fmtv(a))}</td><td class="num ${cls}">${esc(fmtv(b))}</td>
-        <td class="num"><span class="delta ${cls}">${better ? "▲" : "▼"} ${esc(pctTxt)}</span><span class="visually-hidden"> (${esc(t(better ? "b.better" : "b.worse"))})</span></td></tr>`;
-      dock += `<span class="dock-item ${cls}">${esc(label)}: ${esc(fmtv(b))} <b>${esc(pctTxt)}</b></span>`;
+      // Getter über die vorberechneten Varianten: base → cb, mod → cm, Quelle j → ce[j]
+      const pick = (x) => (x === base ? cb : x === mod ? cm : x === cur ? cc : ce[each.indexOf(x)])[i][k];
+      row(`${L(c.t)}: ${t("b.c." + k)}`, a, b, (x) => consVal(k, x, c.healPct), dir, k === "n" ? "n" : "", pick);
     }
   });
   flush();
-  $("bStats").innerHTML = rows || `<tr><td colspan="4" class="mini">${esc(t("b.noChanges"))}</td></tr>`;
+  $("bStats").innerHTML = rows || `<tr><td colspan="3" class="mini">${esc(t("b.noChanges"))}</td></tr>`;
   $("bDock").innerHTML = dock;
   $("bDock").hidden = !dock;
 }
 
 // Verbrauchsmaterial: Werte einer Variante ohne und mit Build.
 // dir: 1 = mehr ist besser (Ladungen, Wirkdauer), -1 = weniger ist besser (Ladezeit)
-const CONS_VALUES = [["n", 1], ["work", 1], ["reload", -1], ["heal", 1]];
+const CONS_VALUES = [["n", 1], ["work", 1], ["reload", -1], ["heal", 1], ["healT", 1]];
 function consRows(s, slot, opt) {
   const sb = BUILD.ships[s.id], ch = build.cs.slice();
   ch[slot] = opt;
@@ -532,12 +556,16 @@ function consRows(s, slot, opt) {
     const x = a[k], y = b[k];
     if ((x === null || x === undefined) && (y === null || y === undefined)) continue;
     const changed = typeof x === "number" && typeof y === "number" && x !== y && x !== -1;
-    out.push({ k, a: x, b: y, changed, better: changed && (y > x) === (dir > 0) });
+    out.push({ k, a: x, b: y, pa: a.healPct, pb: b.healPct, changed, better: changed && (y > x) === (dir > 0) });
   }
   return out;
 }
-const consVal = (k, v) => (v === null || v === undefined ? "–" : k === "n" ? (v === -1 ? "∞" : fmt.format(v)) : k === "heal" ? t("u.hps", { v: fmt.format(v) }) : t("u.s", { v: fmt1.format(v) }));
-const consDelta = (r) => (r.k === "n" ? `${r.b > r.a ? "+" : "−"}${fmt.format(Math.abs(r.b - r.a))}` : `${r.b > r.a ? "+" : "−"}${fmt1.format(Math.abs(((r.b - r.a) / r.a) * 100))} %`);
+// healT: Gesamtheilung je Einsatz in TP und als Anteil der max. TP
+const consVal = (k, v, pct) => (v === null || v === undefined ? "–" : k === "n" ? (v === -1 ? "∞" : fmt.format(v))
+  : k === "heal" ? t("u.hps", { v: fmt.format(v) })
+  : k === "healT" ? t("u.hpTotal", { v: fmt.format(v), p: fmt1.format(pct) })
+  : t("u.s", { v: fmt1.format(v) }));
+const consDelta = (r) => deltaText(r.k === "n" ? "n" : "", r.a, r.b);
 // Gesamtrichtung für die Markierung am Icon: nur besser, nur schlechter oder gemischt
 function consTrend(rows) {
   const ch = rows.filter((r) => r.changed);
@@ -546,9 +574,9 @@ function consTrend(rows) {
 }
 function consLines(rows) {
   return rows.map((r) => {
-    if (!r.changed) return `<li><span class="k">${esc(t("b.c." + r.k))}</span><span class="v">${esc(consVal(r.k, r.b))}</span></li>`;
+    if (!r.changed) return `<li><span class="k">${esc(t("b.c." + r.k))}</span><span class="v">${esc(consVal(r.k, r.b, r.pb))}</span></li>`;
     const cls = r.better ? "up" : "down";
-    return `<li class="changed"><span class="k">${esc(t("b.c." + r.k))}</span><span class="v"><span class="was">${esc(consVal(r.k, r.a))}</span> → <b class="${cls}">${esc(consVal(r.k, r.b))}</b> <span class="delta ${cls}">${r.better ? "▲" : "▼"} ${esc(consDelta(r))}</span><span class="visually-hidden"> (${esc(t(r.better ? "b.better" : "b.worse"))})</span></span></li>`;
+    return `<li class="changed"><span class="k">${esc(t("b.c." + r.k))}</span><span class="v"><b class="${cls}">${esc(consVal(r.k, r.b, r.pb))}</b> <span class="delta ${cls}">${r.better ? "▲" : "▼"} ${esc(consDelta(r))}</span><span class="visually-hidden"> (${esc(t(r.better ? "b.better" : "b.worse"))})</span></span></li>`;
   }).join("");
 }
 function consHtml(s, slot, opt) {
@@ -564,7 +592,7 @@ function showTip(btn) {
   const s = ship(build.id), tip = $("bTip");
   if (!s || !BUILD || !btn) return;
   clearTimeout(tipTimer);
-  tip.innerHTML = consHtml(s, +btn.dataset.cslot, +btn.dataset.copt);
+  tip.innerHTML = btn.dataset.tip ? DELTA_TIPS[btn.dataset.tip] || "" : consHtml(s, +btn.dataset.cslot, +btn.dataset.copt);
   tip.hidden = false;
   if (tipFor && tipFor !== btn) tipFor.removeAttribute("aria-describedby");
   tipFor = btn;
@@ -589,6 +617,12 @@ $("bCons").addEventListener("mouseover", (e) => { const b = e.target.closest("bu
 $("bCons").addEventListener("mouseout", (e) => { if (!e.relatedTarget || !$("bTip").contains(e.relatedTarget)) hideTip(); });
 $("bCons").addEventListener("focusin", (e) => { const b = e.target.closest("button[data-cslot]"); if (b) showTip(b); });
 $("bCons").addEventListener("focusout", () => hideTip(true));
+for (const id of ["bStats"]) {
+  $(id).addEventListener("mouseover", (e) => { const b = e.target.closest("button[data-tip]"); if (b) showTip(b); });
+  $(id).addEventListener("mouseout", (e) => { if (!e.relatedTarget || !$("bTip").contains(e.relatedTarget)) hideTip(); });
+  $(id).addEventListener("focusin", (e) => { const b = e.target.closest("button[data-tip]"); if (b) showTip(b); });
+  $(id).addEventListener("focusout", () => hideTip(true));
+}
 $("bTip").addEventListener("mouseenter", () => clearTimeout(tipTimer));
 $("bTip").addEventListener("mouseleave", () => hideTip());
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("bTip").hidden) hideTip(true); });

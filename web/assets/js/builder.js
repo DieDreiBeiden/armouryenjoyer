@@ -132,12 +132,17 @@ function computeConsumables(sb, choice, mods, species, hp) {
   return (sb.c || []).map((opts, slot) => {
     const c = opts[(choice && choice[slot]) || 0] || opts[0];
     const ty = c.type || "";
+    const work = c.work !== null ? r(c.work * F("ConsumablesWorkTime") * F(ty + "WorkTimeCoeff"), 1) : null;
+    // Heilung: Anteil der max. TP pro Sekunde; je Einsatz = Rate × Wirkdauer
+    const rate = c.heal ? c.heal * F("regenerationHPSpeed") : null;
     return {
       a: c.a, t: c.t, type: ty,
       n: typeof c.n === "number" && c.n > 0 ? c.n + A("additionalConsumables") + A(ty + "AdditionalConsumables") : c.n,
       reload: c.reload !== null ? r(c.reload * F("ConsumableReloadTime") * F(ty + "ReloadCoeff"), 1) : null,
-      work: c.work !== null ? r(c.work * F("ConsumablesWorkTime") * F(ty + "WorkTimeCoeff"), 1) : null,
-      heal: c.heal && hp ? Math.round(c.heal * F("regenerationHPSpeed") * hp) : null
+      work,
+      heal: rate && hp ? Math.round(rate * hp) : null,
+      healT: rate && hp && work ? Math.round(rate * hp * work) : null,
+      healPct: rate && work ? r(rate * work * 100, 1) : null
     };
   });
 }

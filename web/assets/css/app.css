@@ -307,6 +307,11 @@ nav.tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .b-table td.down { color: var(--warn); font-weight: 600; }
 .delta { display: inline-block; padding: 1px 6px; font-family: var(--mono); font-size: 12px; font-weight: 500; white-space: nowrap; border: 1px solid currentColor; }
 .delta.up { color: var(--good); } .delta.down { color: var(--warn); }
+/* Änderung in der Wertetabelle: Schaltfläche, die die Quellen im Tooltip zeigt */
+button.delta { background: transparent; cursor: help; min-height: 24px; line-height: 1.4; }
+button.delta:hover { background: var(--raised); }
+.b-src .k { text-align: left; }
+.b-src .src { color: var(--ink-soft); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 label.sm-check { font-size: 13px; color: var(--ink-soft); min-height: 32px; gap: 6px; }
 label.sm-check input { width: 18px; height: 18px; accent-color: var(--sea); }
 
@@ -372,9 +377,9 @@ label.sm-check input { width: 18px; height: 18px; accent-color: var(--sea); }
 .b-desc { margin-top: 4px; color: var(--ink-soft); font-size: 13px; }
 .b-desc p { margin: 0 0 4px; }
 .b-cvals { margin: 6px 0 0; padding: 6px 0 0; list-style: none; border-top: 1px solid var(--rule); font-size: 13px; }
-.b-cvals li { display: flex; justify-content: space-between; gap: 12px; padding: 1px 0; }
+.b-cvals li { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 12px; padding: 2px 0; }
 .b-cvals .k { color: var(--ink-soft); }
-.b-cvals .v { font-family: var(--mono); text-align: right; }
+.b-cvals .v { font-family: var(--mono); text-align: right; margin-left: auto; }
 .b-cvals .was { color: var(--ink-soft); text-decoration: line-through; }
 .b-cvals b.up { color: var(--good); } .b-cvals b.down { color: var(--warn); }
 .b-cvals .delta { margin-left: 4px; }

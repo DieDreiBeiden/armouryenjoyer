@@ -138,7 +138,7 @@ test("Shipbuilder: Module, Upgrade, Fähigkeiten und Signale ändern Werte, Link
   await expect(page.locator("#bSlots button").nth(5)).toHaveAttribute("aria-expanded", "true");
   await page.locator("#bSlotPick button[aria-label]").filter({ has: page.locator("img") }).and(page.locator('[aria-label*="Hauptbatterie-Modifikation"][aria-label$="3"]')).click();
   const reload = page.locator("#bStats tr", { has: page.locator("th", { hasText: /^Nachladezeit$/ }) }).first();
-  await expect(reload.locator("td").nth(1)).toHaveText("5,05 s");
+  await expect(reload.locator("td").first()).toHaveText("5,05 s");
   await expect(reload.locator(".delta")).toContainText("12");
   await expect(page.locator("#bSlots button").nth(5).locator("img")).toBeVisible();
 
@@ -151,10 +151,10 @@ test("Shipbuilder: Module, Upgrade, Fähigkeiten und Signale ändern Werte, Link
   // Verbrauchsmaterial: Icons je Slot; Upgrade „Schiffsverbrauchsmaterial-Modifikation 1“ verlängert die Wirkdauer
   await expect(page.locator("#bCons button img").first()).toBeVisible();
   const workRow = page.locator("#bStats tr", { has: page.locator("th", { hasText: /^Nebelerzeuger: Wirkdauer$/ }) });
-  await expect(workRow.locator("td").nth(1)).toHaveText("20 s");
+  await expect(workRow.locator("td").first()).toHaveText("20 s");
   await page.locator("#bSlots button").nth(4).click();
   await page.locator("#bSlotPick button").and(page.locator('[aria-label*="Schiffsverbrauchs"]')).click();
-  await expect(workRow.locator("td").nth(1)).toHaveText("22 s");
+  await expect(workRow.locator("td").first()).toHaveText("22 s");
   await expect(workRow).toHaveClass(/changed/);
 
   // Tooltip: Spieltext und Werte, Änderung farbig; Icon markiert; Esc schließt
@@ -165,10 +165,17 @@ test("Shipbuilder: Module, Upgrade, Fähigkeiten und Signale ändern Werte, Link
   await expect(tip).toBeVisible();
   await expect(tip.locator(".b-desc")).not.toBeEmpty();
   await expect(tip.locator("li.changed b.up")).toHaveText("22 s");
-  await expect(tip.locator("li.changed .was")).toHaveText("20 s");
   await expect(smoke).toHaveAttribute("aria-describedby", "bTip");
   await page.keyboard.press("Escape");
   await expect(tip).toBeHidden();
+
+  // Änderung in der Tabelle: Tooltip nennt die Quelle und ihre Einzelwirkung
+  await workRow.locator("button.delta").hover();
+  await expect(tip).toBeVisible();
+  await expect(tip.locator(".b-src li")).toHaveCount(1);
+  await expect(tip.locator(".b-src li")).toContainText("Upgrades");
+  await expect(tip.locator(".b-src li")).toContainText("+10 %");
+  await page.keyboard.press("Escape");
 
   // Signal
   await page.locator("#bFlags button").first().click();

@@ -107,6 +107,10 @@ test("Signale verändern Brand, Flutung, Sekundärartillerie und Heilung", () =>
   const heal = (mods) => computeConsumables(sb, [], mods, yam.type, base.hp).find((c) => c.type === "regenCrew").heal;
   assert.ok(heal([]) > 0);
   assert.equal(heal([flag("PCEF007")]), Math.round(heal([]) * 1.2));
+  // Gesamtheilung je Einsatz = Rate × Wirkdauer, auch als Anteil der max. TP
+  const rc = computeConsumables(sb, [], [], yam.type, base.hp).find((c) => c.type === "regenCrew");
+  assert.equal(rc.healT, Math.round(rc.heal / base.hp * base.hp * rc.work));
+  assert.equal(rc.healPct, Math.round(rc.healT / base.hp * 1000) / 10);
   // Juliet Whiskey Unaone: Flutungschance der Torpedos ×1,15
   const shima = DATA.ships.find((x) => x.name === "Shimakaze"), sb2 = B.ships[shima.id], sel2 = defaultSelection(sb2);
   const f0 = computeBuild(sb2, sel2, [], shima.type).torp.flood;

@@ -116,3 +116,23 @@ test("Signale verändern Brand, Flutung, Sekundärartillerie und Heilung", () =>
   const f0 = computeBuild(sb2, sel2, [], shima.type).torp.flood;
   assert.equal(computeBuild(sb2, sel2, [flag("PCEF019")], shima.type).torp.flood, Math.round(f0 * 1.15));
 });
+
+test("Kommandant: Sprengmeister, Trägheitszünder und schwere HE-Granaten wirken auf Haupt- und Sekundärbatterie", () => {
+  const computeBuild = g("computeBuild"), defaultSelection = g("defaultSelection");
+  const skill = (key) => B.skills.find((k) => k.key === key).mods;
+  const yam = DATA.ships.find((x) => x.name === "Yamato"), sb = B.ships[yam.id], sel = defaultSelection(sb);
+  const base = computeBuild(sb, sel, [], yam.type);
+  // Sprengmeister: +1 Prozentpunkt Brandchance für HE von Haupt- und Sekundärbatterie
+  const de = computeBuild(sb, sel, [skill("HeFireProbability")], yam.type);
+  assert.equal(de.gun.he.burn, base.gun.he.burn + 1);
+  assert.equal(de.secBurn, base.secBurn + 1);
+  // Trägheitszünder: Grund-Brandchance halbiert, HE-Durchschlag +25 %
+  const ifhe = computeBuild(sb, sel, [skill("HePenetration")], yam.type);
+  assert.equal(ifhe.gun.he.burn, base.gun.he.burn / 2);
+  assert.equal(ifhe.secBurn, base.secBurn / 2);
+  assert.equal(ifhe.gun.he.pen, Math.round(base.gun.he.pen * 1.25 * 10) / 10);
+  // Zusammen: erst halbieren, dann +1 Prozentpunkt
+  assert.equal(computeBuild(sb, sel, [skill("HePenetration"), skill("HeFireProbability")], yam.type).gun.he.burn, base.gun.he.burn / 2 + 1);
+  // Schwere Spreng- und SAP-Granaten: HE-Schaden +10 %
+  assert.equal(computeBuild(sb, sel, [skill("HeSapDamage")], yam.type).gun.he.dmg, Math.round(base.gun.he.dmg * 1.1));
+});

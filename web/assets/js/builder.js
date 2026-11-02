@@ -50,12 +50,15 @@ function addend(mods, key, species) {
   }
   return sum;
 }
-// Brandchance in Prozent: Spiel unterscheidet Granaten über 160 mm (Big) und bis 160 mm (Small)
-const BURN_BIG_MM = 160;
+// Brandchance in Prozent:
+// 1. Grundwert × Faktor (Trägheitszünder halbiert; Spiel trennt über 139 mm "HighLevel" und bis 139 mm "LowLevel")
+// 2. plus Zuschläge in Prozentpunkten: Signale (über 160 mm "Big", bis 160 mm "Small") und Sprengmeister
+const BURN_BIG_MM = 160, BURN_HIGH_MM = 139;
 function burnWith(burn, caliber, mods, species) {
   if (burn === null || burn === undefined) return null;
-  const add = addend(mods, caliber > BURN_BIG_MM ? "burnChanceFactorBig" : "burnChanceFactorSmall", species);
-  return r(burn + add * 100, 1);
+  const f = factor(mods, caliber > BURN_HIGH_MM ? "burnChanceFactorHighLevel" : "burnChanceFactorLowLevel", species);
+  const add = addend(mods, caliber > BURN_BIG_MM ? "burnChanceFactorBig" : "burnChanceFactorSmall", species) + addend(mods, "artilleryBurnChanceBonus", species);
+  return r(burn * f + add * 100, 1);
 }
 
 const r = (x, n) => (x === null || x === undefined ? null : Math.round(x * 10 ** n) / 10 ** n);
@@ -106,8 +109,10 @@ function computeBuild(sb, sel, mods, species) {
       reload: art.reload !== null ? r(art.reload * F("GMShotDelay"), 2) : null,
       range: rangeM ? r(rangeM / 1000, 2) : null,
       turn180: rot ? r(180 / rot, 1) : null,
-      disp, he: art.he ? { ...shell(art.he), burn: burnWith(art.he.burn, art.caliber, mods, species) } : null,
-      ap: shell(art.ap, F("GMAPDamageCoeff")), sap: shell(art.sap)
+      disp,
+      he: art.he ? { ...shell(art.he, F("GMHECSDamageCoeff")), burn: burnWith(art.he.burn, art.caliber, mods, species),
+        pen: art.he.pen !== null && art.he.pen !== undefined ? r(art.he.pen * F("GMPenetrationCoeffHE"), 1) : art.he.pen } : null,
+      ap: shell(art.ap, F("GMAPDamageCoeff")), sap: shell(art.sap, F("GMHECSDamageCoeff"))
     };
   }
   if (tor) {

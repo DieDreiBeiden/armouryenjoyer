@@ -150,6 +150,10 @@ test("Shipbuilder: Module, Upgrade, Fähigkeiten und Signale ändern Werte, Link
   await expect(page.locator("#bTip .b-perks li").first()).not.toBeEmpty();
   await expect(page.locator("#bTip .b-why")).toHaveText("Zuerst eine Fähigkeit der Stufe davor wählen.");
   await page.keyboard.press("Escape");
+  // Signal und Modul haben ebenfalls Tooltips mit der Wirkung auf dieses Schiff
+  await page.locator('#bFlags button[aria-label="Sierra Mike"]').hover();
+  await expect(page.locator("#bTip .b-cvals li").first()).toContainText("Höchstgeschwindigkeit");
+  await page.keyboard.press("Escape");
   await page.locator('#bSkills button[style*="grid-row:1;"]').first().click();
   await expect(page.locator("#bPoints")).toHaveText("1 / 21 Punkte");
   await expect(page.locator('#bSkills button[style*="grid-row:2;"]').first()).toHaveAttribute("aria-disabled", "false");

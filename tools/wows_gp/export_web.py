@@ -317,7 +317,8 @@ APPLIED = {"GMShotDelay", "GMRotationSpeed", "GMMaxDist", "GMIdealRadius", "SGRu
            "GTShotDelay", "torpedoSpeedMultiplier", "torpedoRangeCoefficient", "torpedoDamageCoeff", "GSMaxDist",
            "AAAuraDamage", "healthHullCoeff", "GMAPDamageCoeff", "GMDamageCoeff", "speedCoef",
            "burnTime", "floodTime", "floodChanceFactor", "burnChanceFactorBig", "burnChanceFactorSmall",
-           "GSShotDelay", "regenerationHPSpeed"}
+           "GSShotDelay", "regenerationHPSpeed", "artilleryBurnChanceBonus", "burnChanceFactorHighLevel",
+           "burnChanceFactorLowLevel", "GMPenetrationCoeffHE", "GMHECSDamageCoeff"}
 
 
 # Eigene Texte für wichtige Effekte, für die das Spiel keinen eigenen Text mitliefert

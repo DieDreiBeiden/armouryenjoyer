@@ -210,6 +210,10 @@ const aaZone = (z) => (s) => (s.p.aa && s.p.aa[z] ? s.p.aa[z][1] : null);
 const aaRange = (z) => (s) => (s.p.aa && s.p.aa[z] ? s.p.aa[z][0] : null);
 // [Text, Wert, Anzeige, Richtung (1 = mehr ist besser, -1 = weniger, 0 = nicht vergleichen)]
 const PP_ROWS = new Set(["r.burn", "r.secBurn", "r.tflood"]);
+// Munitionsart sichtbar machen: Kennzeichen vor der Zeile (Text und Farbe), Klartext für Tooltip und Leiste
+const AMMO = { he: "HE", ap: "AP", sap: "SAP" };
+const ammoTag = (am) => (am ? `<span class="ammo ${am}">${AMMO[am]}</span> ` : "");
+const rowLabel = (key, am) => (am ? `${AMMO[am]} · ${t(key)}` : t(key));
 const ROWS = [
   ["g.general"],
   ["r.tier", (s) => s.tier, (x) => ROMAN[x], 0],
@@ -231,14 +235,14 @@ const ROWS = [
   ["r.range", (s) => (gun(s) ? gun(s).range : null), (x) => t("u.km", { v: fmt2.format(x) }), 1],
   ["r.turn180", (s) => (gun(s) ? gun(s).turn180 : null), (x) => t("u.s", { v: fmt1.format(x) }), -1],
   ["r.disp", (s) => (gun(s) ? gun(s).disp : null), (x) => t("u.m", { v: fmt.format(x) }), -1],
-  ["r.he", (s) => (gun(s) && gun(s).he ? gun(s).he.dmg : null), (x) => fmt.format(x), 1],
-  ["r.burn", (s) => (gun(s) && gun(s).he ? gun(s).he.burn : null), (x) => t("u.pct", { v: fmt1.format(x) }), 1],
-  ["r.hepen", (s) => (gun(s) && gun(s).he ? gun(s).he.pen : null), (x) => t("u.mm", { v: fmt.format(x) }), 1],
-  ["r.hev", (s) => (gun(s) && gun(s).he ? gun(s).he.speed : null), (x) => t("u.ms", { v: fmt.format(x) }), 1],
-  ["r.ap", (s) => (gun(s) && gun(s).ap ? gun(s).ap.dmg : null), (x) => fmt.format(x), 1],
-  ["r.apv", (s) => (gun(s) && gun(s).ap ? gun(s).ap.speed : null), (x) => t("u.ms", { v: fmt.format(x) }), 1],
-  ["r.sap", (s) => (gun(s) && gun(s).sap ? gun(s).sap.dmg : null), (x) => fmt.format(x), 1],
-  ["r.sappen", (s) => (gun(s) && gun(s).sap ? gun(s).sap.pen : null), (x) => t("u.mm", { v: fmt.format(x) }), 1],
+  ["r.he", (s) => (gun(s) && gun(s).he ? gun(s).he.dmg : null), (x) => fmt.format(x), 1, "he"],
+  ["r.burn", (s) => (gun(s) && gun(s).he ? gun(s).he.burn : null), (x) => t("u.pct", { v: fmt1.format(x) }), 1, "he"],
+  ["r.hepen", (s) => (gun(s) && gun(s).he ? gun(s).he.pen : null), (x) => t("u.mm", { v: fmt.format(x) }), 1, "he"],
+  ["r.hev", (s) => (gun(s) && gun(s).he ? gun(s).he.speed : null), (x) => t("u.ms", { v: fmt.format(x) }), 1, "he"],
+  ["r.ap", (s) => (gun(s) && gun(s).ap ? gun(s).ap.dmg : null), (x) => fmt.format(x), 1, "ap"],
+  ["r.apv", (s) => (gun(s) && gun(s).ap ? gun(s).ap.speed : null), (x) => t("u.ms", { v: fmt.format(x) }), 1, "ap"],
+  ["r.sap", (s) => (gun(s) && gun(s).sap ? gun(s).sap.dmg : null), (x) => fmt.format(x), 1, "sap"],
+  ["r.sappen", (s) => (gun(s) && gun(s).sap ? gun(s).sap.pen : null), (x) => t("u.mm", { v: fmt.format(x) }), 1, "sap"],
   ["g.torps"],
   ["r.tubes", (s) => (torp(s) ? torp(s).tubes : null), (x) => fmt.format(x), 1],
   ["r.treload", (s) => (torp(s) ? torp(s).reload : null), (x) => t("u.s", { v: fmt1.format(x) }), -1],
@@ -256,7 +260,7 @@ const ROWS = [
   ["r.aa2r", aaRange("near"), (x) => t("u.km", { v: fmt1.format(x) }), 1],
   ["r.sec", (s) => v(s.p.sec), (x) => t("u.km", { v: fmt1.format(x) }), 1],
   ["r.secR", (s) => v(s.p.secR), (x) => t("u.s", { v: fmt2.format(x) }), -1],
-  ["r.secBurn", (s) => v(s.p.secBurn), (x) => t("u.pct", { v: fmt1.format(x) }), 1]
+  ["r.secBurn", (s) => v(s.p.secBurn), (x) => t("u.pct", { v: fmt1.format(x) }), 1, "he"]
 ];
 
 function addCompare(id, b = null, dup = false) {
@@ -303,13 +307,16 @@ function renderCompare() {
     return `<th scope="col"><button type="button" class="cmp-ship${e.b ? " has-build" : ""}" data-edit="${i}" aria-label="${esc(t("cmp.buildFor", { name: shipName(s), action: label }))}">${icon(s)}<span class="cmp-name">${name}</span><span class="cmp-build">${esc(label)}</span></button></th>`;
   }).join("")}</tr>`;
   let body = "", n = 0;
-  for (const [key, get, show, dir] of ROWS) {
-    if (!get) { body += `<tr class="grp"><th scope="colgroup" colspan="${cols.length + 1}">${esc(t(key))}</th></tr>`; continue; }
+  let lastAmmo = "";
+  for (const [key, get, show, dir, am] of ROWS) {
+    if (!get) { lastAmmo = ""; body += `<tr class="grp"><th scope="colgroup" colspan="${cols.length + 1}">${esc(t(key))}</th></tr>`; continue; }
     const vals = cols.map((c) => get(c.view));
     if (vals.every((x) => x === null)) continue;
+    const first = am && am !== lastAmmo;
+    lastAmmo = am || "";
     const nums = vals.filter((x) => typeof x === "number");
     const best = dir && nums.length > 1 && new Set(nums).size > 1 ? (dir > 0 ? Math.max(...nums) : Math.min(...nums)) : null;
-    body += `<tr><th scope="row">${esc(t(key))}</th>${vals.map((x, ci) => {
+    body += `<tr${first ? ' class="ammo-first"' : ""}><th scope="row">${ammoTag(am)}${esc(t(key))}</th>${vals.map((x, ci) => {
       if (x === null) return `<td class="na">–</td>`;
       const txt = esc(show ? show(x) : x), isBest = x === best;
       const bestTxt = isBest ? `<span class="visually-hidden"> (${esc(t("cmp.best"))})</span>` : "";
@@ -317,7 +324,7 @@ function renderCompare() {
       if (typeof a !== "number" || typeof x !== "number" || a === x) return `<td${isBest ? ' class="best"' : ""}>${txt}${bestTxt}</td>`;
       // Mit Build: Wert farbig, Änderung gegenüber demselben Schiff ohne Build dahinter
       const better = (x > a) === (dir > 0), cls = better ? "up" : "down", kind = PP_ROWS.has(key) ? "pp" : "";
-      const label = `${shipName(c.s)}: ${t(key)}`;
+      const label = `${shipName(c.s)}: ${rowLabel(key, am)}`;
       return `<td class="${isBest ? "best " : ""}built"><span class="cv ${cls}">${txt}</span>${bestTxt} ${deltaCell("c" + n++, label, cls, better, deltaText(kind, a, x), partsOf(c.ctx, get, dir, kind))}</td>`;
     }).join("")}</tr>`;
   }
@@ -402,8 +409,11 @@ function openInBuilder(id) {
   saveBuild();
   location.hash = "#builder";
 }
+// Zuschläge als Anteil (0,01 = +1 Prozentpunkt), keine Faktoren
+const ADDITIVE_PCT = new Set(["burnChanceFactorBig", "burnChanceFactorSmall", "artilleryBurnChanceBonus", "bombBurnChanceBonus", "rocketBurnChanceBonus"]);
 function effectText(key, v) {
   if (typeof v !== "number") return "";
+  if (ADDITIVE_PCT.has(key)) return `${v > 0 ? "+" : ""}${fmt1.format(Math.round(v * 1000) / 10)} %`;
   const pct = v > 0 && v <= 5 && (!Number.isInteger(v) || /Coeff|Coefficient|Multiplier$/.test(key));
   if (pct) { const d = Math.round((v - 1) * 1000) / 10; return `${d > 0 ? "+" : ""}${fmt1.format(d)} %`; }
   return `${v > 0 ? "+" : ""}${fmt.format(v)}`;
@@ -493,14 +503,14 @@ function renderBuilder() {
   $("bSlots").innerHTML = sb.up.map((list, slot) => {
     const u = build.up[slot] !== null ? BUILD.upgrades[build.up[slot]] : null;
     const label = `${t("b.slot", { n: slot + 1 })}: ${u ? L(u.t) : t("b.empty")}`;
-    return `<button type="button" class="b-slot${u ? " filled" : ""}" data-slot="${slot}" aria-expanded="${openSlot === slot}" aria-label="${esc(label)}" title="${esc(label)}"${list.length ? "" : " disabled"}>${u && u.icon ? img("upgrades/" + u.icon) : `<span aria-hidden="true">${list.length ? "+" : "–"}</span>`}</button>`;
+    return `<button type="button" class="b-slot${u ? " filled" : ""}" data-slot="${slot}" aria-expanded="${openSlot === slot}" aria-label="${esc(label)}"${list.length ? "" : " disabled"}>${u && u.icon ? img("upgrades/" + u.icon) : `<span aria-hidden="true">${list.length ? "+" : "–"}</span>`}</button>`;
   }).join("");
   if (openSlot !== null && sb.up[openSlot] && sb.up[openSlot].length) {
     const list = sb.up[openSlot];
     $("bSlotPick").hidden = false;
     $("bSlotPick").innerHTML = `<div class="b-pickhead">${esc(t("b.slot", { n: openSlot + 1 }))}</div><div class="b-icons">
       <button type="button" class="b-icon none" data-upg="-1" aria-pressed="${build.up[openSlot] === null}" aria-label="${esc(t("b.none"))}" title="${esc(t("b.none"))}"><span aria-hidden="true">∅</span></button>
-      ${list.map((i) => { const u = BUILD.upgrades[i]; return `<button type="button" class="b-icon" data-upg="${i}" aria-pressed="${build.up[openSlot] === i}" aria-label="${esc(L(u.t))}" title="${esc(L(u.t))}">${u.icon ? img("upgrades/" + u.icon) : esc(L(u.t))}</button>`; }).join("")}</div>`;
+      ${list.map((i) => { const u = BUILD.upgrades[i]; return `<button type="button" class="b-icon" data-upg="${i}" aria-pressed="${build.up[openSlot] === i}" aria-label="${esc(L(u.t))}">${u.icon ? img("upgrades/" + u.icon) : esc(L(u.t))}</button>`; }).join("")}</div>`;
   } else { $("bSlotPick").hidden = true; $("bSlotPick").innerHTML = ""; }
 
   // Verbrauchsmaterial: je Slot die Varianten als Icons
@@ -522,7 +532,7 @@ function renderBuilder() {
   // Signale
   $("bFlags").innerHTML = BUILD.flags.map((f, i) => {
     const on = build.fl.includes(i), ok = on || build.fl.length < MAX_FLAGS;
-    return `<button type="button" class="b-icon flag${on ? " on" : ""}" data-flag="${i}" aria-pressed="${on}" aria-disabled="${!ok}" aria-label="${esc(L(f.t))}" title="${esc(L(f.t))}">${img("flags/" + f.key)}</button>`;
+    return `<button type="button" class="b-icon flag${on ? " on" : ""}" data-flag="${i}" aria-pressed="${on}" aria-disabled="${!ok}" aria-label="${esc(L(f.t))}">${img("flags/" + f.key)}</button>`;
   }).join("");
   $("bFlagCount").textContent = t("b.flagCount", { n: build.fl.length, max: MAX_FLAGS });
 
@@ -551,21 +561,26 @@ function renderBuildStats(s, sb, def) {
   for (const k of Object.keys(DELTA_TIPS)) if (k[0] === "d") delete DELTA_TIPS[k];
   let rows = "", group = "", groupRows = "", dock = "", n = 0;
   const flush = () => { if (groupRows) rows += group + groupRows; groupRows = ""; };
-  const row = (label, a, b, txt, dir, kind, get) => {
+  let lastAmmo = "";
+  const row = (label, a, b, txt, dir, kind, get, am = "", text = label) => {
     const changed = typeof a === "number" && typeof b === "number" && a !== b && a !== -1;
     if (only && !changed) return;
-    if (!changed) { groupRows += `<tr><th scope="row">${esc(label)}</th><td class="num">${esc(txt(b))}</td><td></td></tr>`; return; }
+    // Neue Munitionsart beginnt: Trennlinie
+    const first = am && am !== lastAmmo ? " ammo-first" : "";
+    lastAmmo = am;
+    const th = `<th scope="row">${ammoTag(am)}${esc(text)}</th>`;
+    if (!changed) { groupRows += `<tr class="${first.trim()}">${th}<td class="num">${esc(txt(b))}</td><td></td></tr>`; return; }
     const better = (b > a) === (dir > 0), cls = better ? "up" : "down", d = deltaText(kind, a, b);
-    groupRows += `<tr class="changed"><th scope="row">${esc(label)}</th><td class="num ${cls}">${esc(txt(b))}</td>
+    groupRows += `<tr class="changed${first}">${th}<td class="num ${cls}">${esc(txt(b))}</td>
       <td class="num">${deltaCell("d" + n++, label, cls, better, d, partsOf(ctx, get, dir, kind))}</td></tr>`;
     dock += `<span class="dock-item ${cls}">${esc(label)}: ${esc(txt(b))} <b>${esc(d)}</b></span>`;
   };
-  for (const [key, get, show, dir] of ROWS) {
-    if (!get) { flush(); group = `<tr class="grp"><th scope="colgroup" colspan="3">${esc(t(key))}</th></tr>`; continue; }
+  for (const [key, get, show, dir, am] of ROWS) {
+    if (!get) { flush(); lastAmmo = ""; group = `<tr class="grp"><th scope="colgroup" colspan="3">${esc(t(key))}</th></tr>`; continue; }
     if (!dir) continue;
     const a = get(base), b = get(cur);
     if (a === null && b === null) continue;
-    row(t(key), a, b, (x) => (x === null ? "–" : show ? show(x) : x), dir, PP_ROWS.has(key) ? "pp" : "", get);
+    row(rowLabel(key, am), a, b, (x) => (x === null ? "–" : show ? show(x) : x), dir, PP_ROWS.has(key) ? "pp" : "", get, am || "", t(key));
   }
   flush();
   // Verbrauchsmaterial: Heilung hängt von den Lebenspunkten der jeweiligen Variante ab
@@ -624,6 +639,43 @@ function consLines(rows) {
     return `<li class="changed"><span class="k">${esc(t("b.c." + r.k))}</span><span class="v"><b class="${cls}">${esc(consVal(r.k, r.b, r.pb))}</b> <span class="delta ${cls}">${r.better ? "▲" : "▼"} ${esc(consDelta(r))}</span><span class="visually-hidden"> (${esc(t(r.better ? "b.better" : "b.worse"))})</span></span></li>`;
   }).join("");
 }
+// Wirkung auf dieses Schiff: alle angezeigten Werte, die sich von Zustand A nach B ändern, farbig mit Änderung
+function impactList(s, sb, selA, modsA, selB, modsB) {
+  const P = (se, m) => ({ ...s, p: computeBuild(sb, se, m, s.type) });
+  const A = P(selA, modsA), B = P(selB, modsB), items = [];
+  const add = (label, a, b, val, dir, kind) => {
+    if (typeof a !== "number" || typeof b !== "number" || a === b || a === -1) return;
+    const better = (b > a) === (dir > 0);
+    items.push(`<li><span class="k">${esc(label)}</span><span class="v"><b class="${better ? "up" : "down"}">${esc(val)}</b> <span class="delta ${better ? "up" : "down"}">${better ? "▲" : "▼"} ${esc(deltaText(kind, a, b))}</span><span class="visually-hidden"> (${esc(t(better ? "b.better" : "b.worse"))})</span></span></li>`);
+  };
+  for (const [key, get, show, dir, am] of ROWS) {
+    if (!get || !dir) continue;
+    const b = get(B);
+    add(rowLabel(key, am), get(A), b, show ? show(b) : b, dir, PP_ROWS.has(key) ? "pp" : "");
+  }
+  const ca = computeConsumables(sb, build.cs, modsA, s.type, A.p.hp), cb = computeConsumables(sb, build.cs, modsB, s.type, B.p.hp);
+  cb.forEach((c, i) => { for (const [k, dir] of CONS_VALUES) add(`${L(c.t)}: ${t("b.c." + k)}`, ca[i][k], c[k], consVal(k, c[k], c.healPct), dir, k === "n" ? "n" : ""); });
+  return items;
+}
+// Abschnitt im Tooltip: was ein Upgrade, Skill oder Signal allein an diesem Schiff ändert
+function impactHtml(s, mods, head = "b.impact") {
+  const sb = BUILD.ships[s.id], items = impactList(s, sb, build.sel, [], build.sel, [mods]);
+  return `<p class="b-tiphead">${esc(t(head))}</p>${items.length ? `<ul class="b-cvals">${items.join("")}</ul>` : `<p class="mini">${esc(t("b.noImpact"))}</p>`}`;
+}
+function upgradeHtml(s, u) {
+  return `<strong>${esc(L(u.t))}</strong><ul class="b-perks b-effects">${effectLines(u.mods, s.type)}</ul>${impactHtml(s, u.mods)}`;
+}
+function flagHtml(s, f) {
+  return `<strong>${esc(L(f.t))}</strong><ul class="b-perks b-effects">${effectLines(f.mods, s.type)}</ul>${impactHtml(s, f.mods)}`;
+}
+// Modul: was sich gegenüber der aktuellen Wahl ändert
+function moduleHtml(s, k, u) {
+  const sb = BUILD.ships[s.id], o = sb.o[k].find((x) => x.u === u);
+  const head = `<strong>${esc(L(o.n))}</strong> <span class="mini">${esc(t("b.mod." + k))}</span>`;
+  if (build.sel[k] === u) return `${head}<p class="mini">${esc(t("b.modCurrent"))}</p>`;
+  const mods = chosenMods(s), items = impactList(s, sb, build.sel, mods, { ...build.sel, [k]: u }, mods);
+  return `${head}<p class="b-tiphead">${esc(t("b.impactSwitch"))}</p>${items.length ? `<ul class="b-cvals">${items.join("")}</ul>` : `<p class="mini">${esc(t("b.noImpact"))}</p>`}`;
+}
 // Kommandantenfähigkeit: Name, Kosten, Wirkung laut Spiel; dazu, warum sie gerade nicht wählbar ist
 function skillHtml(s, k) {
   const cls = s.type, perks = (k.perks[cls] && (k.perks[cls][LANG] || k.perks[cls].en)) || [];
@@ -631,7 +683,7 @@ function skillHtml(s, k) {
   const why = on ? (canRemove(k.id, cls) ? "" : "b.skillDep")
     : canAdd(k, cls) ? "" : skillPoints(cls) + skillCost(k, cls) > MAX_POINTS ? "b.noPoints" : "b.needTier";
   return `<strong>${esc(L(k.t))}</strong> <span class="mini">${esc(t("b.cost", { n: skillCost(k, cls) }))}${on ? " · " + esc(t("b.skillOn")) : ""}</span>
-    <ul class="b-perks">${perks.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>${k.cond ? `<p class="mini b-cond">${esc(t("b.cond"))}</p>` : ""}${why ? `<p class="mini b-why">${esc(t(why))}</p>` : ""}`;
+    <ul class="b-perks">${perks.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>${k.cond ? `<p class="mini b-cond">${esc(t("b.cond"))}</p>` : ""}${impactHtml(s, k.mods)}${why ? `<p class="mini b-why">${esc(t(why))}</p>` : ""}`;
 }
 function consHtml(s, slot, opt) {
   const c = BUILD.ships[s.id].c[slot][opt];
@@ -646,9 +698,16 @@ function showTip(btn) {
   const s = ship(build.id), tip = $("bTip");
   if (!BUILD || !btn || (!btn.dataset.tip && !s)) return;
   clearTimeout(tipTimer);
-  tip.innerHTML = btn.dataset.tip ? DELTA_TIPS[btn.dataset.tip] || ""
-    : btn.dataset.skill ? skillHtml(s, BUILD.skills.find((x) => x.id === +btn.dataset.skill))
-    : consHtml(s, +btn.dataset.cslot, +btn.dataset.copt);
+  const d = btn.dataset;
+  const html = d.tip ? DELTA_TIPS[d.tip] || ""
+    : d.skill ? skillHtml(s, BUILD.skills.find((x) => x.id === +d.skill))
+    : d.cslot ? consHtml(s, +d.cslot, +d.copt)
+    : d.flag ? flagHtml(s, BUILD.flags[+d.flag])
+    : d.mod ? moduleHtml(s, d.mod, d.u)
+    : d.upg !== undefined && +d.upg >= 0 ? upgradeHtml(s, BUILD.upgrades[+d.upg])
+    : d.slot !== undefined && build.up[+d.slot] !== null ? upgradeHtml(s, BUILD.upgrades[build.up[+d.slot]]) : "";
+  if (!html) { hideTip(true); return; }
+  tip.innerHTML = html;
   tip.hidden = false;
   if (tipFor && tipFor !== btn) tipFor.removeAttribute("aria-describedby");
   tipFor = btn;
@@ -673,7 +732,8 @@ $("bCons").addEventListener("mouseover", (e) => { const b = e.target.closest("bu
 $("bCons").addEventListener("mouseout", (e) => { if (!e.relatedTarget || !$("bTip").contains(e.relatedTarget)) hideTip(); });
 $("bCons").addEventListener("focusin", (e) => { const b = e.target.closest("button[data-cslot]"); if (b) showTip(b); });
 $("bCons").addEventListener("focusout", () => hideTip(true));
-for (const [id, sel] of [["bStats", "button[data-tip]"], ["cmpBody", "button[data-tip]"], ["bSkills", "button[data-skill]"]]) {
+for (const [id, sel] of [["bStats", "button[data-tip]"], ["cmpBody", "button[data-tip]"], ["bSkills", "button[data-skill]"], ["bFlags", "button[data-flag]"],
+  ["bModules", "button[data-mod]"], ["bSlots", "button[data-slot]"], ["bSlotPick", "button[data-upg]"]]) {
   $(id).addEventListener("mouseover", (e) => { const b = e.target.closest(sel); if (b) showTip(b); });
   $(id).addEventListener("mouseout", (e) => { if (!e.relatedTarget || !$("bTip").contains(e.relatedTarget)) hideTip(); });
   $(id).addEventListener("focusin", (e) => { const b = e.target.closest(sel); if (b) showTip(b); });

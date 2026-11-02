@@ -64,12 +64,14 @@ const I18N = {
     "extra.empty": "Keine Premium- oder Sonderschiffe für diese Auswahl.",
 
     "cmp.title": "Schiffe vergleichen",
-    "cmp.lede": "Bis zu sechs Schiffe nebeneinander. Der beste Wert jeder Zeile ist markiert.",
+    "cmp.lede": "Bis zu sechs Schiffe nebeneinander. Der beste Wert jeder Zeile ist markiert. Klick auf ein Schiff, um einen Build dafür zu erstellen; Änderungen durch den Build stehen farbig dahinter.",
     "cmp.search": "Schiff hinzufügen", "cmp.searchPh": "Name eingeben, z. B. Yamato",
     "cmp.noHit": "Kein Schiff mit diesem Namen.",
     "cmp.full": "Höchstens sechs Schiffe. Entferne eines, um ein neues hinzuzufügen.",
     "cmp.remove": "{name} entfernen", "cmp.clear": "Alle entfernen",
     "cmp.empty": "Noch keine Schiffe gewählt. Such oben nach einem Namen oder nutze „Zum Vergleich“ im Techbaum.",
+    "cmp.withBuild": "Build", "cmp.addBuild": "Build erstellen", "cmp.editBuild": "Build bearbeiten", "cmp.buildFor": "{name}: {action}",
+    "dlg.title": "Build für {name}", "dlg.save": "Übernehmen", "dlg.add": "Als neue Spalte", "dlg.remove": "Build entfernen", "dlg.cancel": "Abbrechen",
     "cmp.best": "bester Wert",
     "cmp.note": "Werte aus den Spieldateien (GameParams) für die Top-Konfiguration: jeweils das am weitesten erforschte Modul, ohne Kommandanten, Upgrades und Signale. Streuung bei maximaler Reichweite. Testschiffe ohne Werte.",
 
@@ -150,12 +152,14 @@ const I18N = {
     "extra.empty": "No premium or special ships for this selection.",
 
     "cmp.title": "Compare ships",
-    "cmp.lede": "Up to six ships side by side. The best value in each row is marked.",
+    "cmp.lede": "Up to six ships side by side. The best value in each row is marked. Click a ship to create a build for it; changes from the build are shown in colour next to the value.",
     "cmp.search": "Add ship", "cmp.searchPh": "Type a name, e.g. Yamato",
     "cmp.noHit": "No ship with that name.",
     "cmp.full": "Six ships at most. Remove one to add another.",
     "cmp.remove": "Remove {name}", "cmp.clear": "Remove all",
     "cmp.empty": "No ships picked yet. Search for a name above or use “Add to compare” in the tech tree.",
+    "cmp.withBuild": "build", "cmp.addBuild": "Create build", "cmp.editBuild": "Edit build", "cmp.buildFor": "{name}: {action}",
+    "dlg.title": "Build for {name}", "dlg.save": "Apply", "dlg.add": "Add as new column", "dlg.remove": "Remove build", "dlg.cancel": "Cancel",
     "cmp.best": "best value",
     "cmp.note": "Values from the game files (GameParams) for the top configuration: the furthest researched module of each type, without commanders, upgrades and signals. Dispersion at maximum range. Test ships without stats.",
 

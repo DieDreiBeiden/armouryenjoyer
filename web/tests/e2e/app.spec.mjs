@@ -213,3 +213,47 @@ test("Shipbuilder aus dem Techbaum öffnen", async ({ page }) => {
   await expect(page.locator("#bSkills button")).toHaveCount(24);
 });
 
+
+test.describe("Vergleich mit Builds", () => {
+  test.use({ bypassCSP: true });
+  test("Build im Overlay erstellen, als neue Spalte speichern, farbig vergleichen, entfernen", async ({ page }) => {
+    const errors = await guard(page);
+    // Builder-Reiter hat einen eigenen Build, der unberührt bleiben muss
+    await openSite(page, { lang: "de", cmp: [4282267344], build: { id: 3751753712, sel: null, up: [null, null, null, null, null, null], sk: [], fl: [], cs: [] } }, "#vergleich");
+    await page.locator('#cmpHead button[data-edit="0"]').click();
+    const dlg = page.locator("#cmpDialog");
+    await expect(dlg).toBeVisible();
+    await expect(page.locator("#dlgTitle")).toHaveText("Build für Shimakaze");
+    await dlg.locator('#bFlags button[aria-label="Juliet Whiskey Unaone"]').click();
+
+    // Barrierefreiheit bei offenem Overlay
+    await page.addScriptTag({ content: axeSource });
+    const res = await page.evaluate(() => window.axe.run(document.getElementById("cmpDialog"), {
+      runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] }, rules: { "target-size": { enabled: false } }
+    }));
+    expect(res.violations.map((x) => `${x.id}: ${x.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(", ")}`)).toEqual([]);
+
+    await page.locator("#dlgAdd").click();
+    await expect(dlg).toBeHidden();
+    await expect(page.locator("#cmpHead button[data-edit]")).toHaveCount(2);
+    await expect(page.locator('#cmpHead button[data-edit="1"]')).toHaveClass(/has-build/);
+    // Flutungschance: Spalte ohne Build unverändert, Spalte mit Build grün mit Änderung
+    const flood = page.locator("#cmpBody tr", { has: page.locator("th", { hasText: /^Flutungschance$/ }) });
+    await expect(flood.locator("td").nth(0)).toHaveText("361 %");
+    await expect(flood.locator("td").nth(1).locator(".cv.up")).toHaveText("415 %");
+    await flood.locator("button.delta").hover();
+    await expect(page.locator("#bTip .b-src li")).toContainText("Juliet Whiskey Unaone");
+    await page.keyboard.press("Escape");
+
+    // Builder-Reiter behält seinen eigenen Build
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("armoury:build")));
+    expect(stored.id).toBe(3751753712);
+    expect(stored.fl).toEqual([]);
+
+    // Build wieder entfernen
+    await page.locator('#cmpHead button[data-edit="1"]').click();
+    await page.locator("#dlgRemove").click();
+    await expect(page.locator("#cmpBody td.built")).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+});

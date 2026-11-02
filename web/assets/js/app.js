@@ -57,6 +57,10 @@ const icon = (s, cls = "sicon") => `<img class="${cls}" src="assets/img/ships/${
 // Fehlende Bilder ausblenden (Ereignis fängt nur die Erfassungsphase)
 document.addEventListener("error", (e) => { if (e.target.tagName === "IMG") e.target.classList.add("missing"); }, true);
 
+// Vergleich: Einträge {id, b}, b = Build-Code (wie im geteilten Link) oder null; dasselbe Schiff darf mehrfach vorkommen
+state.cmp = (Array.isArray(state.cmp) ? state.cmp : []).map((x) => (typeof x === "number" ? { id: x, b: null } : x))
+  .filter((x) => x && typeof x.id === "number").map((x) => ({ id: x.id, b: typeof x.b === "string" ? x.b : null }));
+const inCompare = (id) => state.cmp.some((e) => e.id === id);
 function save() { for (const k of Object.keys(state)) store.set(k, state[k]); }
 
 // ---------- Techbaum ----------
@@ -145,7 +149,7 @@ function renderDetail() {
   if (p.gun) add(t("r.reload"), t("u.s", { v: fmt2.format(p.gun.reload) }));
   if (p.torp) add(t("r.torp"), t("v.torp", { n: p.torp.tubes, r: fmt1.format(p.torp.range) }));
   if (p.aa) add(t("r.aa"), AA_ZONES.filter((z) => p.aa[z]).map((z) => t("v.aa", { d: fmt.format(p.aa[z][1]), r: fmt1.format(p.aa[z][0]) })).join(" · "));
-  const inCmp = state.cmp.includes(s.id);
+  const inCmp = inCompare(s.id);
   $("detail").innerHTML = `
     <div class="detail-head">${icon(s, "sicon big")}<div><div class="detail-name">${esc(shipName(s))}</div>
       <div class="mini">${esc(ROMAN[s.tier])} · ${esc(typeName(s.type))} · ${esc(nationName(s.nation))} ${tags}</div></div></div>
@@ -255,38 +259,66 @@ const ROWS = [
   ["r.secBurn", (s) => v(s.p.secBurn), (x) => t("u.pct", { v: fmt1.format(x) }), 1]
 ];
 
-function addCompare(id) {
-  if (state.cmp.includes(id)) return;
-  if (state.cmp.length >= MAX_CMP) { $("cmpResults").innerHTML = `<p class="msg err">${esc(t("cmp.full"))}</p>`; return; }
-  state.cmp.push(id); changed();
+function addCompare(id, b = null, dup = false) {
+  if (!dup && inCompare(id)) return false;
+  if (state.cmp.length >= MAX_CMP) { $("cmpResults").innerHTML = `<p class="msg err">${esc(t("cmp.full"))}</p>`; return false; }
+  state.cmp.push({ id, b }); changed();
+  return true;
 }
 function renderPicker() {
   const q = nameKey($("cmpSearch").value.trim());
-  const hits = q ? DATA.ships.filter((s) => !state.cmp.includes(s.id) && (nameKey(s.name).includes(q) || (s.nameDe && nameKey(s.nameDe).includes(q))))
+  const hits = q ? DATA.ships.filter((s) => !inCompare(s.id) && (nameKey(s.name).includes(q) || (s.nameDe && nameKey(s.nameDe).includes(q))))
     .sort((a, b) => (nameKey(a.name).startsWith(q) ? 0 : 1) - (nameKey(b.name).startsWith(q) ? 0 : 1) || b.tier - a.tier).slice(0, 8) : [];
   $("cmpResults").innerHTML = hits.map((s) => `<button type="button" class="ghost hit" data-id="${s.id}">${icon(s)}<span class="nm">${esc(shipName(s))}</span><span class="mini">${ROMAN[s.tier]} · ${esc(nationName(s.nation))}</span></button>`).join("") +
     (q && !hits.length ? `<p class="mini">${esc(t("cmp.noHit"))}</p>` : "");
-  $("cmpPicked").innerHTML = state.cmp.map((id) => ship(id)).filter(Boolean)
-    .map((s) => `<button type="button" class="chip pick" data-id="${s.id}" aria-label="${esc(t("cmp.remove", { name: s.name }))}">${esc(shipName(s))} <span aria-hidden="true">×</span></button>`).join("");
+  $("cmpPicked").innerHTML = state.cmp.map((e, i) => {
+    const s = ship(e.id), name = shipName(s) + (e.b ? ` (${t("cmp.withBuild")})` : "");
+    return `<button type="button" class="chip pick" data-i="${i}" aria-label="${esc(t("cmp.remove", { name }))}">${esc(name)} <span aria-hidden="true">×</span></button>`;
+  }).join("");
+}
+// Spalten des Vergleichs: ohne Build die Top-Konfiguration, mit Build die berechneten Werte samt Einzelquellen
+function cmpColumns() {
+  return state.cmp.map((e, i) => {
+    const s = ship(e.id);
+    const sb = e.b && BUILD ? BUILD.ships[e.id] : null;
+    const b = sb ? parseBuild(e.b) : null;
+    if (!b) return { i, s, e, view: s };
+    const ctx = diffCtx(s, sb, b);
+    return { i, s, e, ctx, view: ctx.cur };
+  });
 }
 function renderCompare() {
-  state.cmp = state.cmp.filter((id) => ship(id));
+  state.cmp = state.cmp.filter((e) => ship(e.id));
   renderPicker();
-  const list = state.cmp.map(ship);
-  $("cmpEmpty").hidden = list.length > 0; $("cmpWrap").hidden = !list.length; $("cmpClear").disabled = !list.length;
-  if (!list.length) return;
-  $("cmpHead").innerHTML = `<tr><td></td>${list.map((s) => `<th scope="col">${icon(s)}<span class="cmp-name">${esc(shipName(s))}</span></th>`).join("")}</tr>`;
-  let body = "";
+  // Builds brauchen die Builder-Daten: laden und danach neu zeichnen
+  if (!BUILD && state.cmp.some((e) => e.b)) { const l = loadBuilder(); if (l) l.then(() => { if (BUILD) renderCompare(); }); }
+  const cols = cmpColumns();
+  $("cmpEmpty").hidden = cols.length > 0; $("cmpWrap").hidden = !cols.length; $("cmpClear").disabled = !cols.length;
+  if (!cols.length) return;
+  for (const k of Object.keys(DELTA_TIPS)) if (k[0] === "c") delete DELTA_TIPS[k];
+  $("cmpHead").innerHTML = `<tr><td></td>${cols.map(({ i, s, e }) => {
+    const name = esc(shipName(s));
+    if (s.test) return `<th scope="col">${icon(s)}<span class="cmp-name">${name}</span></th>`;
+    const label = t(e.b ? "cmp.editBuild" : "cmp.addBuild");
+    return `<th scope="col"><button type="button" class="cmp-ship${e.b ? " has-build" : ""}" data-edit="${i}" aria-label="${esc(t("cmp.buildFor", { name: shipName(s), action: label }))}">${icon(s)}<span class="cmp-name">${name}</span><span class="cmp-build">${esc(label)}</span></button></th>`;
+  }).join("")}</tr>`;
+  let body = "", n = 0;
   for (const [key, get, show, dir] of ROWS) {
-    if (!get) { body += `<tr class="grp"><th scope="colgroup" colspan="${list.length + 1}">${esc(t(key))}</th></tr>`; continue; }
-    const vals = list.map(get);
+    if (!get) { body += `<tr class="grp"><th scope="colgroup" colspan="${cols.length + 1}">${esc(t(key))}</th></tr>`; continue; }
+    const vals = cols.map((c) => get(c.view));
     if (vals.every((x) => x === null)) continue;
     const nums = vals.filter((x) => typeof x === "number");
     const best = dir && nums.length > 1 && new Set(nums).size > 1 ? (dir > 0 ? Math.max(...nums) : Math.min(...nums)) : null;
-    body += `<tr><th scope="row">${esc(t(key))}</th>${vals.map((x) => {
+    body += `<tr><th scope="row">${esc(t(key))}</th>${vals.map((x, ci) => {
       if (x === null) return `<td class="na">–</td>`;
-      const txt = show ? show(x) : x;
-      return x === best ? `<td class="best">${esc(txt)}<span class="visually-hidden"> (${esc(t("cmp.best"))})</span></td>` : `<td>${esc(txt)}</td>`;
+      const txt = esc(show ? show(x) : x), isBest = x === best;
+      const bestTxt = isBest ? `<span class="visually-hidden"> (${esc(t("cmp.best"))})</span>` : "";
+      const c = cols[ci], a = c.ctx && dir ? get(c.ctx.base) : null;
+      if (typeof a !== "number" || typeof x !== "number" || a === x) return `<td${isBest ? ' class="best"' : ""}>${txt}${bestTxt}</td>`;
+      // Mit Build: Wert farbig, Änderung gegenüber demselben Schiff ohne Build dahinter
+      const better = (x > a) === (dir > 0), cls = better ? "up" : "down", kind = PP_ROWS.has(key) ? "pp" : "";
+      const label = `${shipName(c.s)}: ${t(key)}`;
+      return `<td class="${isBest ? "best " : ""}built"><span class="cv ${cls}">${txt}</span>${bestTxt} ${deltaCell("c" + n++, label, cls, better, deltaText(kind, a, x), partsOf(c.ctx, get, dir, kind))}</td>`;
     }).join("")}</tr>`;
   }
   $("cmpBody").innerHTML = body;
@@ -303,10 +335,11 @@ $("cmpResults").addEventListener("click", (e) => {
   if (b) { addCompare(+b.dataset.id); $("cmpSearch").value = ""; renderPicker(); $("cmpSearch").focus(); }
 });
 $("cmpPicked").addEventListener("click", (e) => {
-  const b = e.target.closest("button[data-id]");
-  if (b) { state.cmp = state.cmp.filter((id) => id !== +b.dataset.id); changed(); $("cmpSearch").focus(); }
+  const b = e.target.closest("button[data-i]");
+  if (b) { state.cmp.splice(+b.dataset.i, 1); changed(); $("cmpSearch").focus(); }
 });
 $("cmpClear").addEventListener("click", () => { state.cmp = []; changed(); });
+$("cmpHead").addEventListener("click", (e) => { const b = e.target.closest("button[data-edit]"); if (b) openBuildDialog(+b.dataset.edit); });
 
 // ---------- Shipbuilder ----------
 // Daten werden erst geladen, wenn der Reiter offen ist.
@@ -323,7 +356,9 @@ const MOD_ICON = { hull: "Hull", artillery: "Artillery", torpedoes: "Torpedoes",
 const BTYPES = ["hull", "artillery", "torpedoes", "engine", "fireControl"];
 // Link mit ?b=<id>.<Module>.<Upgrades>.<Fähigkeiten>.<Signale> übernimmt einen geteilten Build
 const shared = new URLSearchParams(location.search).get("b");
-const saveBuild = () => store.set("build", build);
+// Im Overlay des Vergleichs wird ein fremder Build bearbeitet: dann nichts speichern
+let dlg = null;
+const saveBuild = () => { if (!dlg) store.set("build", build); };
 const L = (o) => (o && (o[LANG] || o.en)) || "";
 
 function loadBuilder() {
@@ -334,26 +369,33 @@ function loadBuilder() {
     .catch(() => { buildLoading = null; $("bMsg").className = "msg err"; $("bMsg").textContent = t("b.failed"); });
   return buildLoading;
 }
-function applyShared(code) {
+// Build-Code → Build-Objekt (ungültige Teile fallen weg); null, wenn das Schiff keine Builder-Daten hat
+function parseBuild(code) {
   const [id, mods, ups, sks, fls, css] = String(code).split(".");
   const sb = BUILD.ships[id];
-  if (!sb) return;
-  const s = ship(+id);
-  build.id = +id;
-  const def = defaultSelection(sb);
-  const idx = (mods || "").split("-");
-  build.sel = Object.fromEntries(BTYPES.filter((k) => sb.o[k]).map((k, i) => [k, (sb.o[k][+idx[i]] || {}).u || def[k]]));
-  build.up = (ups || "").split("-").slice(0, 6).map((x, slot) => (x !== "" && sb.up[slot] && sb.up[slot].includes(+x) ? +x : null));
-  while (build.up.length < 6) build.up.push(null);
-  build.sk = (sks || "").split("-").filter(Boolean).map(Number).filter((n) => BUILD.skills.some((k) => k.id === n && s && k.grid[s.type]));
-  build.fl = (fls || "").split("-").filter(Boolean).map(Number).filter((i) => BUILD.flags[i]).slice(0, MAX_FLAGS);
-  build.cs = (css || "").split("-").map((x, slot) => (sb.c[slot] && sb.c[slot][+x] ? +x : 0));
+  if (!sb) return null;
+  const s = ship(+id), def = defaultSelection(sb), idx = (mods || "").split("-");
+  const up = (ups || "").split("-").slice(0, 6).map((x, slot) => (x !== "" && sb.up[slot] && sb.up[slot].includes(+x) ? +x : null));
+  while (up.length < 6) up.push(null);
+  return {
+    id: +id,
+    sel: Object.fromEntries(BTYPES.filter((k) => sb.o[k]).map((k, i) => [k, (sb.o[k][+idx[i]] || {}).u || def[k]])),
+    up,
+    sk: (sks || "").split("-").filter(Boolean).map(Number).filter((n) => BUILD.skills.some((k) => k.id === n && s && k.grid[s.type])),
+    fl: (fls || "").split("-").filter(Boolean).map(Number).filter((i) => BUILD.flags[i]).slice(0, MAX_FLAGS),
+    cs: (css || "").split("-").map((x, slot) => (sb.c[slot] && sb.c[slot][+x] ? +x : 0))
+  };
+}
+function applyShared(code) {
+  const b = parseBuild(code);
+  if (b) Object.assign(build, b);
   history.replaceState(null, "", location.pathname + "#builder");
 }
-function shareCode() {
-  const sb = BUILD.ships[build.id];
-  const mods = BTYPES.filter((k) => sb.o[k]).map((k) => Math.max(0, sb.o[k].findIndex((o) => o.u === build.sel[k]))).join("-");
-  return [build.id, mods, build.up.map((x) => (x === null ? "" : x)).join("-"), build.sk.join("-"), build.fl.join("-"), build.cs.join("-")].join(".");
+function shareCode(b = build) {
+  const sb = BUILD.ships[b.id];
+  const def = defaultSelection(sb), sel = b.sel || def;
+  const mods = BTYPES.filter((k) => sb.o[k]).map((k) => Math.max(0, sb.o[k].findIndex((o) => o.u === sel[k]))).join("-");
+  return [b.id, mods, b.up.map((x) => (x === null ? "" : x)).join("-"), b.sk.join("-"), b.fl.join("-"), b.cs.join("-")].join(".");
 }
 function openInBuilder(id) {
   if (build.id !== id) { build.id = id; build.sel = null; build.up = EMPTY6(); build.cs = []; }
@@ -400,14 +442,32 @@ function canRemove(id, cls) {
 }
 
 // Alles, was Werte verändert, mit Herkunft: Upgrades, Kommandant, Signale
-function buildSources(s) {
+function buildSources(s, b = build) {
   const out = [];
-  for (const i of build.up) if (i !== null) out.push({ kind: "b.upgrades", name: L(BUILD.upgrades[i].t), mods: BUILD.upgrades[i].mods });
-  for (const id of build.sk) { const k = BUILD.skills.find((x) => x.id === id); if (k && k.grid[s.type]) out.push({ kind: "b.captain", name: L(k.t), mods: k.mods }); }
-  for (const i of build.fl) if (BUILD.flags[i]) out.push({ kind: "b.signals", name: L(BUILD.flags[i].t), mods: BUILD.flags[i].mods });
+  for (const i of b.up) if (i !== null) out.push({ kind: "b.upgrades", name: L(BUILD.upgrades[i].t), mods: BUILD.upgrades[i].mods });
+  for (const id of b.sk) { const k = BUILD.skills.find((x) => x.id === id); if (k && k.grid[s.type]) out.push({ kind: "b.captain", name: L(k.t), mods: k.mods }); }
+  for (const i of b.fl) if (BUILD.flags[i]) out.push({ kind: "b.signals", name: L(BUILD.flags[i].t), mods: BUILD.flags[i].mods });
   return out;
 }
-function chosenMods(s) { return buildSources(s).map((x) => x.mods); }
+function chosenMods(s, b = build) { return buildSources(s, b).map((x) => x.mods); }
+// Werte eines Builds: Standard (Top ohne Ausrüstung), nur Module, komplett, und je Quelle allein
+function diffCtx(s, sb, b) {
+  const srcs = buildSources(s, b), all = srcs.map((x) => x.mods), sel = b.sel || defaultSelection(sb);
+  const P = (se, mods) => ({ ...s, p: computeBuild(sb, se, mods, s.type) });
+  return { srcs, all, base: P(defaultSelection(sb), []), mod: P(sel, []), cur: P(sel, all), each: srcs.map((x) => P(sel, [x.mods])) };
+}
+// Einzelwirkungen: Modulwahl gegenüber Standard, dann jede Quelle allein auf den gewählten Modulen
+function partsOf(ctx, get, dir, kind) {
+  const out = [];
+  const add = (src, a, b) => {
+    if (typeof a !== "number" || typeof b !== "number" || a === b || a === -1) return;
+    const better = (b > a) === (dir > 0);
+    out.push({ ...src, better, cls: better ? "up" : "down", txt: deltaText(kind, a, b) });
+  };
+  add({ kind: "", name: t("b.modules") }, get(ctx.base), get(ctx.mod));
+  ctx.srcs.forEach((x, i) => add(x, get(ctx.mod), get(ctx.each[i])));
+  return out;
+}
 
 function renderBuilder() {
   if (!BUILD) return;
@@ -477,7 +537,7 @@ function deltaText(kind, a, b) {
   return `${sign}${fmt1.format(Math.abs(((b - a) / a) * 100))} %`;
 }
 // Tooltip-Inhalte der Änderungen, über data-tip an der Schaltfläche
-let DELTA_TIPS = {};
+const DELTA_TIPS = {};
 function deltaCell(id, label, cls, better, txt, parts) {
   DELTA_TIPS[id] = `<strong>${esc(label)}</strong><ul class="b-cvals b-src">${parts.map((x) =>
     `<li><span class="k">${x.kind ? `<span class="src">${esc(t(x.kind))}</span> ` : ""}${esc(x.name)}</span><span class="v"><span class="delta ${x.cls}">${x.better ? "▲" : "▼"} ${esc(x.txt)}</span></span></li>`).join("")}</ul>${parts.length > 1 ? `<p class="mini">${esc(t("b.srcNote"))}</p>` : ""}`;
@@ -486,33 +546,18 @@ function deltaCell(id, label, cls, better, txt, parts) {
 
 // Werte des Builds in einer Spalte, Änderung gegenüber Standard (Top-Module ohne Ausrüstung) farbig dahinter
 function renderBuildStats(s, sb, def) {
-  const srcs = buildSources(s), all = srcs.map((x) => x.mods);
-  const P = (sel, mods) => ({ ...s, p: computeBuild(sb, sel, mods, s.type) });
-  const base = P(def, []), mod = P(build.sel, []), cur = P(build.sel, all);
-  const each = srcs.map((x) => P(build.sel, [x.mods]));
+  const ctx = diffCtx(s, sb, build), { srcs, all, base, mod, cur, each } = ctx;
   const only = $("bOnlyChanged").checked;
-  DELTA_TIPS = {};
+  for (const k of Object.keys(DELTA_TIPS)) if (k[0] === "d") delete DELTA_TIPS[k];
   let rows = "", group = "", groupRows = "", dock = "", n = 0;
   const flush = () => { if (groupRows) rows += group + groupRows; groupRows = ""; };
-  // Einzelwirkungen: Modulwahl gegenüber Standard, dann jede Quelle allein auf den gewählten Modulen
-  const partsOf = (get, dir, kind) => {
-    const out = [];
-    const add = (src, a, b) => {
-      if (typeof a !== "number" || typeof b !== "number" || a === b || a === -1) return;
-      const better = (b > a) === (dir > 0);
-      out.push({ ...src, better, cls: better ? "up" : "down", txt: deltaText(kind, a, b) });
-    };
-    add({ kind: "", name: t("b.modules") }, get(base), get(mod));
-    srcs.forEach((x, i) => add(x, get(mod), get(each[i])));
-    return out;
-  };
   const row = (label, a, b, txt, dir, kind, get) => {
     const changed = typeof a === "number" && typeof b === "number" && a !== b && a !== -1;
     if (only && !changed) return;
     if (!changed) { groupRows += `<tr><th scope="row">${esc(label)}</th><td class="num">${esc(txt(b))}</td><td></td></tr>`; return; }
     const better = (b > a) === (dir > 0), cls = better ? "up" : "down", d = deltaText(kind, a, b);
     groupRows += `<tr class="changed"><th scope="row">${esc(label)}</th><td class="num ${cls}">${esc(txt(b))}</td>
-      <td class="num">${deltaCell("d" + n++, label, cls, better, d, partsOf(get, dir, kind))}</td></tr>`;
+      <td class="num">${deltaCell("d" + n++, label, cls, better, d, partsOf(ctx, get, dir, kind))}</td></tr>`;
     dock += `<span class="dock-item ${cls}">${esc(label)}: ${esc(txt(b))} <b>${esc(d)}</b></span>`;
   };
   for (const [key, get, show, dir] of ROWS) {
@@ -590,7 +635,7 @@ function consHtml(s, slot, opt) {
 let tipFor = null, tipTimer = 0;
 function showTip(btn) {
   const s = ship(build.id), tip = $("bTip");
-  if (!s || !BUILD || !btn) return;
+  if (!BUILD || !btn || (!btn.dataset.tip && !s)) return;
   clearTimeout(tipTimer);
   tip.innerHTML = btn.dataset.tip ? DELTA_TIPS[btn.dataset.tip] || "" : consHtml(s, +btn.dataset.cslot, +btn.dataset.copt);
   tip.hidden = false;
@@ -617,7 +662,7 @@ $("bCons").addEventListener("mouseover", (e) => { const b = e.target.closest("bu
 $("bCons").addEventListener("mouseout", (e) => { if (!e.relatedTarget || !$("bTip").contains(e.relatedTarget)) hideTip(); });
 $("bCons").addEventListener("focusin", (e) => { const b = e.target.closest("button[data-cslot]"); if (b) showTip(b); });
 $("bCons").addEventListener("focusout", () => hideTip(true));
-for (const id of ["bStats"]) {
+for (const id of ["bStats", "cmpBody"]) {
   $(id).addEventListener("mouseover", (e) => { const b = e.target.closest("button[data-tip]"); if (b) showTip(b); });
   $(id).addEventListener("mouseout", (e) => { if (!e.relatedTarget || !$("bTip").contains(e.relatedTarget)) hideTip(); });
   $(id).addEventListener("focusin", (e) => { const b = e.target.closest("button[data-tip]"); if (b) showTip(b); });
@@ -625,7 +670,8 @@ for (const id of ["bStats"]) {
 }
 $("bTip").addEventListener("mouseenter", () => clearTimeout(tipTimer));
 $("bTip").addEventListener("mouseleave", () => hideTip());
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("bTip").hidden) hideTip(true); });
+// Esc schließt zuerst den Tooltip, erst danach das Overlay
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("bTip").hidden) { e.preventDefault(); hideTip(true); } });
 window.addEventListener("scroll", () => { if (!$("bTip").hidden) placeTip(); }, { passive: true, capture: true });
 window.addEventListener("resize", () => { if (!$("bTip").hidden) placeTip(); });
 
@@ -736,6 +782,48 @@ $("bResults").addEventListener("click", (e) => {
   build.id = +b.dataset.id; build.sel = null; build.up = EMPTY6(); build.cs = []; openSlot = null;
   renderBuilder();
 });
+
+// ---------- Build im Vergleich (Overlay) ----------
+// Das Overlay nutzt die Builder-Oberfläche; der Build des Builder-Reiters wird solange beiseitegelegt.
+function openBuildDialog(i) {
+  const e = state.cmp[i];
+  if (!e || dlg) return;
+  if (!BUILD) { const l = loadBuilder(); if (l) l.then(() => { if (BUILD) openBuildDialog(i); }); return; }
+  if (!BUILD.ships[e.id]) return;
+  dlg = { i, main: JSON.parse(JSON.stringify(build)) };
+  Object.assign(build, (e.b && parseBuild(e.b)) || { id: e.id, sel: null, up: EMPTY6(), sk: [], fl: [], cs: [] });
+  openSlot = null; $("bInfo").innerHTML = "";
+  $("dlgBody").append($("bBody"), $("bDock"), $("bTip"));
+  $("dlgTitle").textContent = t("dlg.title", { name: shipName(ship(e.id)) });
+  $("dlgRemove").hidden = !e.b;
+  $("dlgAdd").disabled = state.cmp.length >= MAX_CMP;
+  renderBuilder();
+  $("cmpDialog").showModal();
+  $("dlgSave").focus();
+}
+function endBuildDialog(action) {
+  if (!dlg) return;
+  const { i, main } = dlg, code = shareCode();
+  hideTip(true);
+  dlg = null;
+  Object.assign(build, main);
+  openSlot = null; $("bInfo").innerHTML = "";
+  $("v-builder").append($("bBody"), $("bDock"));
+  document.body.append($("bTip"));
+  if ($("cmpDialog").open) $("cmpDialog").close();
+  if (action === "save") state.cmp[i].b = code;
+  else if (action === "remove") state.cmp[i].b = null;
+  else if (action === "add") addCompare(state.cmp[i].id, code, true);
+  renderBuilder();
+  changed();
+  const head = $("cmpHead").querySelector(`[data-edit="${action === "add" ? state.cmp.length - 1 : i}"]`);
+  if (head) head.focus();
+}
+$("dlgSave").addEventListener("click", () => endBuildDialog("save"));
+$("dlgAdd").addEventListener("click", () => endBuildDialog("add"));
+$("dlgRemove").addEventListener("click", () => endBuildDialog("remove"));
+$("dlgClose").addEventListener("click", () => endBuildDialog("cancel"));
+$("cmpDialog").addEventListener("close", () => endBuildDialog("cancel"));
 
 // ---------- Reiter ----------
 const VIEWS = ["techbaum", "vergleich", "builder"];

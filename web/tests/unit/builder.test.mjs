@@ -136,3 +136,24 @@ test("Kommandant: Sprengmeister, Trägheitszünder und schwere HE-Granaten wirke
   // Schwere Spreng- und SAP-Granaten: HE-Schaden +10 %
   assert.equal(computeBuild(sb, sel, [skill("HeSapDamage")], yam.type).gun.he.dmg, Math.round(base.gun.he.dmg * 1.1));
 });
+
+test("Verbrauchsmaterial: Erfassungsreichweiten und Kennwerte sind vorhanden", () => {
+  const computeConsumables = g("computeConsumables");
+  const need = { rls: "dist", sonar: "dist", hydrophone: "dist", submarineLocator: "dist", smokeGenerator: "radius", speedBoosters: "boost", artilleryBoosters: "boost", scout: "boost", fighter: "planes", torpedoReloader: "treload" };
+  const missing = [];
+  for (const [id, sb] of Object.entries(B.ships)) {
+    const s = DATA.ships.find((x) => x.id === +id);
+    sb.c.forEach((opts, slot) => opts.forEach((o, i) => {
+      const ch = []; ch[slot] = i;
+      const c = computeConsumables(sb, ch, [], s.type, 1000)[slot];
+      if (need[c.type] && !(c[need[c.type]] > 0)) missing.push(`${s.name}: ${c.type}`);
+    }));
+  }
+  assert.deepEqual(missing.slice(0, 5), []);
+  // Des Moines: Radar 10 km, Hydro 5 km gegen Schiffe und 3,5 km gegen Torpedos
+  const dm = DATA.ships.find((x) => x.name === "Des Moines"), sb = B.ships[dm.id];
+  const pick = (type) => { const slot = sb.c.findIndex((o) => o.some((x) => x.type === type)); const ch = []; ch[slot] = sb.c[slot].findIndex((x) => x.type === type); return computeConsumables(sb, ch, [], dm.type, 1000)[slot]; };
+  assert.equal(pick("rls").dist, 10);
+  assert.equal(pick("sonar").dist, 5);
+  assert.equal(pick("sonar").tdist, 3.5);
+});

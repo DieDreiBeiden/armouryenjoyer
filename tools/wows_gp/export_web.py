@@ -318,7 +318,7 @@ APPLIED = {"GMShotDelay", "GMRotationSpeed", "GMMaxDist", "GMIdealRadius", "SGRu
            "AAAuraDamage", "healthHullCoeff", "GMAPDamageCoeff", "GMDamageCoeff", "speedCoef",
            "burnTime", "floodTime", "floodChanceFactor", "burnChanceFactorBig", "burnChanceFactorSmall",
            "GSShotDelay", "regenerationHPSpeed", "artilleryBurnChanceBonus", "burnChanceFactorHighLevel",
-           "burnChanceFactorLowLevel", "GMPenetrationCoeffHE", "GMHECSDamageCoeff"}
+           "burnChanceFactorLowLevel", "GMPenetrationCoeffHE", "GMHECSDamageCoeff", "smokeGeneratorLifeTime", "extraFighterCount"}
 
 
 # Eigene Texte für wichtige Effekte, für die das Spiel keinen eigenen Text mitliefert
@@ -424,6 +424,31 @@ def skills_and_flags(gp, loc_de, loc_en, assets):
     return skills, flags
 
 
+# Kennwerte je Verbrauchsmaterial aus "logic": (Ausgabe-Schlüssel, Feld, Umrechnung)
+# Distanzen in BW-Einheiten (×30 m) → km, Hydro-Radius in m → km
+CONS_EXTRA = {
+    "rls": [("ship", "distShip", lambda v: rnd(v * BW / 1000, 2))],
+    "sonar": [("ship", "distShip", lambda v: rnd(v * BW / 1000, 2)), ("torp", "distTorpedo", lambda v: rnd(v * BW / 1000, 2))],
+    "submarineLocator": [("ship", "distShip", lambda v: rnd(v * BW / 1000, 2))],
+    "hydrophone": [("ship", "hydrophoneWaveRadius", lambda v: rnd(v / 1000, 2)), ("show", "zoneLifetime", lambda v: rnd(v, 1))],
+    "smokeGenerator": [("radius", "radius", lambda v: rnd(v * BW)), ("life", "lifeTime", lambda v: rnd(v, 1))],
+    "speedBoosters": [("boost", "boostCoeff", lambda v: rnd(v * 100, 1))],
+    "artilleryBoosters": [("boost", "boostCoeff", lambda v: rnd(v * 100, 1))],
+    "scout": [("boost", "artilleryDistCoeff", lambda v: rnd((v - 1) * 100, 1))],
+    "fighter": [("planes", "fightersNum", lambda v: int(v)), ("fr", "radius", lambda v: rnd(v * BW / 1000, 2))],
+    "torpedoReloader": [("treload", "torpedoReloadTime", lambda v: rnd(v, 1))],
+}
+
+
+def consumable_extra(ctype, logic):
+    out = {}
+    for key, field, conv in CONS_EXTRA.get(ctype, []):
+        v = num(w._get(logic, field)) if logic is not None else None
+        if v is not None and v > 0:
+            out[key] = conv(v)
+    return out or None
+
+
 def consumables(gp, raw, loc_de, loc_en):
     """Verbrauchsmaterial je Slot: Varianten mit Ladungen (-1 = unbegrenzt), Ladezeit, Wirkdauer."""
     out = []
@@ -439,7 +464,8 @@ def consumables(gp, raw, loc_de, loc_en):
                          "n": num(w._get(v, "numConsumables")) if num(w._get(v, "numConsumables")) is not None else (-1 if w.to_plain(w._get(v, "numConsumables")) == -1 else None),
                          "reload": num(w._get(v, "reloadTime")), "work": num(w._get(v, "workTime")),
                          # Reparaturmannschaft: Anteil der maximalen TP pro Sekunde
-                         "heal": num(w._get(w._get(v, "logic"), "regenerationHPSpeed")) or None})
+                         "heal": num(w._get(w._get(v, "logic"), "regenerationHPSpeed")) or None,
+                         "x": consumable_extra(w.to_plain(w._get(v, "consumableType")), w._get(v, "logic"))})
         if opts:
             out.append(opts)
     return out

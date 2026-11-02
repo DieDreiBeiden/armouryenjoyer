@@ -593,7 +593,7 @@ function renderBuildStats(s, sb, def) {
       if ((a === null || a === undefined) && (b === null || b === undefined)) continue;
       // Getter über die vorberechneten Varianten: base → cb, mod → cm, Quelle j → ce[j]
       const pick = (x) => (x === base ? cb : x === mod ? cm : x === cur ? cc : ce[each.indexOf(x)])[i][k];
-      row(`${L(c.t)}: ${t("b.c." + k)}`, a, b, (x) => consVal(k, x, c.healPct), dir, k === "n" ? "n" : "", pick);
+      row(`${L(c.t)}: ${consLabel(k, c.type)}`, a, b, (x) => consVal(k, x, c.healPct, c.type), dir, k === "n" || k === "planes" ? "n" : "", pick);
     }
   });
   flush();
@@ -604,7 +604,10 @@ function renderBuildStats(s, sb, def) {
 
 // Verbrauchsmaterial: Werte einer Variante ohne und mit Build.
 // dir: 1 = mehr ist besser (Ladungen, Wirkdauer), -1 = weniger ist besser (Ladezeit)
-const CONS_VALUES = [["n", 1], ["work", 1], ["reload", -1], ["heal", 1], ["healT", 1]];
+const CONS_VALUES = [["n", 1], ["work", 1], ["reload", -1], ["heal", 1], ["healT", 1],
+  ["dist", 1], ["tdist", 1], ["show", 1], ["radius", 1], ["life", 1], ["boost", 1], ["planes", 1], ["fr", 1], ["treload", -1]];
+// Beschriftung: Boost je nach Art (Geschwindigkeit, Nachladezeit, Reichweite); Erfassung je nach Art
+const consLabel = (k, type) => t(k === "boost" ? `b.c.boost.${type}` : k === "dist" && type === "hydrophone" ? "b.c.hdist" : `b.c.${k}`);
 function consRows(s, slot, opt) {
   const sb = BUILD.ships[s.id], ch = build.cs.slice();
   ch[slot] = opt;
@@ -616,16 +619,21 @@ function consRows(s, slot, opt) {
     const x = a[k], y = b[k];
     if ((x === null || x === undefined) && (y === null || y === undefined)) continue;
     const changed = typeof x === "number" && typeof y === "number" && x !== y && x !== -1;
-    out.push({ k, a: x, b: y, pa: a.healPct, pb: b.healPct, changed, better: changed && (y > x) === (dir > 0) });
+    out.push({ k, ty: b.type, a: x, b: y, pa: a.healPct, pb: b.healPct, changed, better: changed && (y > x) === (dir > 0) });
   }
   return out;
 }
 // healT: Gesamtheilung je Einsatz in TP und als Anteil der max. TP
-const consVal = (k, v, pct) => (v === null || v === undefined ? "–" : k === "n" ? (v === -1 ? "∞" : fmt.format(v))
+const consVal = (k, v, pct, type) => (v === null || v === undefined ? "–" : k === "n" ? (v === -1 ? "∞" : fmt.format(v))
   : k === "heal" ? t("u.hps", { v: fmt.format(v) })
   : k === "healT" ? t("u.hpTotal", { v: fmt.format(v), p: fmt1.format(pct) })
+  : k === "dist" || k === "tdist" || k === "fr" ? t("u.km", { v: fmt2.format(v) })
+  : k === "radius" ? t("u.m", { v: fmt.format(v) })
+  : k === "planes" ? fmt.format(v)
+  // Hauptbatterie-Nachladebeschleuniger verkürzt, die anderen erhöhen
+  : k === "boost" ? t("u.pct", { v: `${type === "artilleryBoosters" ? "−" : "+"}${fmt1.format(v)}` })
   : t("u.s", { v: fmt1.format(v) }));
-const consDelta = (r) => deltaText(r.k === "n" ? "n" : "", r.a, r.b);
+const consDelta = (r) => deltaText(r.k === "n" || r.k === "planes" ? "n" : "", r.a, r.b);
 // Gesamtrichtung für die Markierung am Icon: nur besser, nur schlechter oder gemischt
 function consTrend(rows) {
   const ch = rows.filter((r) => r.changed);
@@ -634,9 +642,9 @@ function consTrend(rows) {
 }
 function consLines(rows) {
   return rows.map((r) => {
-    if (!r.changed) return `<li><span class="k">${esc(t("b.c." + r.k))}</span><span class="v">${esc(consVal(r.k, r.b, r.pb))}</span></li>`;
+    if (!r.changed) return `<li><span class="k">${esc(consLabel(r.k, r.ty))}</span><span class="v">${esc(consVal(r.k, r.b, r.pb, r.ty))}</span></li>`;
     const cls = r.better ? "up" : "down";
-    return `<li class="changed"><span class="k">${esc(t("b.c." + r.k))}</span><span class="v"><b class="${cls}">${esc(consVal(r.k, r.b, r.pb))}</b> <span class="delta ${cls}">${r.better ? "▲" : "▼"} ${esc(consDelta(r))}</span><span class="visually-hidden"> (${esc(t(r.better ? "b.better" : "b.worse"))})</span></span></li>`;
+    return `<li class="changed"><span class="k">${esc(consLabel(r.k, r.ty))}</span><span class="v"><b class="${cls}">${esc(consVal(r.k, r.b, r.pb, r.ty))}</b> <span class="delta ${cls}">${r.better ? "▲" : "▼"} ${esc(consDelta(r))}</span><span class="visually-hidden"> (${esc(t(r.better ? "b.better" : "b.worse"))})</span></span></li>`;
   }).join("");
 }
 // Wirkung auf dieses Schiff: alle angezeigten Werte, die sich von Zustand A nach B ändern, farbig mit Änderung
@@ -654,7 +662,7 @@ function impactList(s, sb, selA, modsA, selB, modsB) {
     add(rowLabel(key, am), get(A), b, show ? show(b) : b, dir, PP_ROWS.has(key) ? "pp" : "");
   }
   const ca = computeConsumables(sb, build.cs, modsA, s.type, A.p.hp), cb = computeConsumables(sb, build.cs, modsB, s.type, B.p.hp);
-  cb.forEach((c, i) => { for (const [k, dir] of CONS_VALUES) add(`${L(c.t)}: ${t("b.c." + k)}`, ca[i][k], c[k], consVal(k, c[k], c.healPct), dir, k === "n" ? "n" : ""); });
+  cb.forEach((c, i) => { for (const [k, dir] of CONS_VALUES) add(`${L(c.t)}: ${consLabel(k, c.type)}`, ca[i][k], c[k], consVal(k, c[k], c.healPct, c.type), dir, k === "n" || k === "planes" ? "n" : ""); });
   return items;
 }
 // Abschnitt im Tooltip: was ein Upgrade, Skill oder Signal allein an diesem Schiff ändert

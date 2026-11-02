@@ -140,6 +140,8 @@ function computeConsumables(sb, choice, mods, species, hp) {
     const work = c.work !== null ? r(c.work * F("ConsumablesWorkTime") * F(ty + "WorkTimeCoeff"), 1) : null;
     // Heilung: Anteil der max. TP pro Sekunde; je Einsatz = Rate × Wirkdauer
     const rate = c.heal ? c.heal * F("regenerationHPSpeed") : null;
+    const x = c.x || {};
+    const val = (v) => (v === undefined ? null : v);
     return {
       a: c.a, t: c.t, type: ty,
       n: typeof c.n === "number" && c.n > 0 ? c.n + A("additionalConsumables") + A(ty + "AdditionalConsumables") : c.n,
@@ -147,7 +149,13 @@ function computeConsumables(sb, choice, mods, species, hp) {
       work,
       heal: rate && hp ? Math.round(rate * hp) : null,
       healT: rate && hp && work ? Math.round(rate * hp * work) : null,
-      healPct: rate && work ? r(rate * work * 100, 1) : null
+      healPct: rate && work ? r(rate * work * 100, 1) : null,
+      // Kennwerte laut Spiel: Erfassungsreichweiten, Nebel, Boost, Jäger, Torpedo-Schnellladung
+      dist: val(x.ship), tdist: val(x.torp), show: val(x.show), radius: val(x.radius),
+      life: x.life !== undefined ? r(x.life * F("smokeGeneratorLifeTime"), 1) : null,
+      boost: val(x.boost), fr: val(x.fr),
+      planes: x.planes !== undefined ? x.planes + (ty === "fighter" ? A("extraFighterCount") : 0) : null,
+      treload: val(x.treload)
     };
   });
 }

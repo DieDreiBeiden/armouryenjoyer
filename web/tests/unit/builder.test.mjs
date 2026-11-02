@@ -17,7 +17,9 @@ test("Ohne Upgrades rechnet der Builder für jedes Schiff genau die Werte von sh
     assert.ok(sb, `${s.name} fehlt in builder.json`);
     const p = plain(computeBuild(sb, defaultSelection(sb), [], s.type));
     const want = plain(s.p);
-    if (JSON.stringify(p) !== JSON.stringify(want)) diffs.push(`${s.name}: ${JSON.stringify(p).slice(0, 120)} != ${JSON.stringify(want).slice(0, 120)}`);
+    // Reihenfolge der Felder spielt keine Rolle
+    const canon = (x) => JSON.stringify(x, (k, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort()) : v));
+    if (canon(p) !== canon(want)) diffs.push(`${s.name}: ${canon(p)} != ${canon(want)}`);
   }
   assert.deepEqual(diffs.slice(0, 5), []);
 });
@@ -85,4 +87,28 @@ test("Verbrauchsmaterial: Rohwerte ohne Effekte, Upgrades verlängern Dauer, jed
   assert.deepEqual(missing, []);
   // Jedes Verbrauchsmaterial hat einen Spieltext in beiden Sprachen
   assert.deepEqual([...names].filter((n) => !(B.cdesc[n] && B.cdesc[n].de && B.cdesc[n].en)), []);
+});
+
+test("Signale verändern Brand, Flutung, Sekundärartillerie und Heilung", () => {
+  const computeBuild = g("computeBuild"), defaultSelection = g("defaultSelection"), computeConsumables = g("computeConsumables");
+  const flag = (key) => B.flags.find((f) => f.key === key).mods;
+  const yam = DATA.ships.find((x) => x.name === "Yamato"), sb = B.ships[yam.id], sel = defaultSelection(sb);
+  const base = computeBuild(sb, sel, [], yam.type);
+  // Victor Lima: +1 Prozentpunkt über 160 mm (460 mm), +0,5 bis 160 mm (155-mm-Sekundärgeschütze)
+  const vl = computeBuild(sb, sel, [flag("PCEF017")], yam.type);
+  assert.equal(vl.gun.he.burn, base.gun.he.burn + 1);
+  assert.equal(vl.secBurn, base.secBurn + 0.5);
+  // India Yankee −20 % Branddauer, Juliet Yankee Bissotwo −20 % Flutungsdauer
+  assert.equal(computeBuild(sb, sel, [flag("PCEF008")], yam.type).fireT, base.fireT * 0.8);
+  assert.equal(computeBuild(sb, sel, [flag("PCEF009")], yam.type).floodT, base.floodT * 0.8);
+  // Mike Yankee Soxisix −5 % Nachladezeit der Sekundärartillerie
+  assert.equal(computeBuild(sb, sel, [flag("PCEF012")], yam.type).secR, Math.round(base.secR * 0.95 * 100) / 100);
+  // India Delta: Reparaturmannschaft heilt 20 % mehr
+  const heal = (mods) => computeConsumables(sb, [], mods, yam.type, base.hp).find((c) => c.type === "regenCrew").heal;
+  assert.ok(heal([]) > 0);
+  assert.equal(heal([flag("PCEF007")]), Math.round(heal([]) * 1.2));
+  // Juliet Whiskey Unaone: Flutungschance der Torpedos ×1,15
+  const shima = DATA.ships.find((x) => x.name === "Shimakaze"), sb2 = B.ships[shima.id], sel2 = defaultSelection(sb2);
+  const f0 = computeBuild(sb2, sel2, [], shima.type).torp.flood;
+  assert.equal(computeBuild(sb2, sel2, [flag("PCEF019")], shima.type).torp.flood, Math.round(f0 * 1.15));
 });

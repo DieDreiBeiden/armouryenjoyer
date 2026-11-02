@@ -166,6 +166,8 @@ def torp_stats(gp, module):
         "dmg": rnd(alpha / 3 + dmg) if alpha else None,
         "speed": num(w._get(p, "speed")),
         "seen": num(w._get(p, "visibilityFactor"), 2),
+        # Flutungschance wie im Hafen (uwCritical in Prozent)
+        "flood": rnd(num(w._get(p, "uwCritical")) * 100) if num(w._get(p, "uwCritical")) else None,
     }
 
 
@@ -195,7 +197,35 @@ def hull_stats(raw, hull_name):
         "hp": num(w._get(h, "health")), "speed": num(w._get(h, "maxSpeed")),
         "turn": num(w._get(h, "turningRadius")), "rudder": num(w._get(h, "rudderTime"), 1),
         "seen": num(w._get(h, "visibilityFactor"), 2), "air": num(w._get(h, "visibilityFactorByPlane"), 2),
+        # Brand- und Flutungsdauer: dritter Wert der Knoten [Wahrscheinlichkeit, …, Dauer s]
+        "fireT": node_time(w._get(h, "burnNodes")), "floodT": node_time(w._get(h, "floodNodes")),
     }
+
+
+def node_time(nodes):
+    nodes = w.to_plain(nodes) or []
+    times = [n[2] for n in nodes if isinstance(n, list) and len(n) > 2 and isinstance(n[2], (int, float)) and n[2] > 0]
+    return rnd(max(times), 1) if times else None
+
+
+def sec_stats(gp, atba):
+    """Sekundärartillerie: Nachladezeit, Kaliber und HE-Brandchance des größten Kalibers."""
+    best = None
+    for m in mounts(atba) if atba is not None else []:
+        cal = num(w._get(m, "barrelDiameter")) or 0
+        if best is None or cal > best[0]:
+            best = (cal, m)
+    if best is None:
+        return {"secR": None, "secCal": None, "secBurn": None}
+    cal, m = best
+    burn = None
+    for name in w.to_plain(w._get(m, "ammoList")) or []:
+        p = gp.raw(name)
+        if p is not None and w.to_plain(w._get(p, "ammoType")) == "HE":
+            b = num(w._get(p, "burnProb"))
+            burn = rnd(b * 100, 1) if b and b > 0 else None
+            break
+    return {"secR": num(w._get(m, "shotDelay"), 2), "secCal": rnd(cal * 1000) if cal else None, "secBurn": burn}
 
 
 def ship_stats(gp, raw, top=True):
@@ -213,12 +243,15 @@ def ship_stats(gp, raw, top=True):
     p["aa"] = aa_stats(raw, c)
     sec = num(w._get(atba, "maxDist")) if atba is not None else None
     p["sec"] = rnd(sec / 1000, 1) if sec else None
+    ss = sec_stats(gp, atba) if sec else {"secR": None, "secBurn": None}
+    p["secR"], p["secBurn"] = ss["secR"], ss["secBurn"]
     return p
 
 
 def empty_stats():
     return {"hp": None, "speed": None, "turn": None, "rudder": None, "seen": None, "air": None,
-            "gun": None, "torp": None, "aa": None, "sec": None}
+            "fireT": None, "floodT": None, "gun": None, "torp": None, "aa": None, "sec": None,
+            "secR": None, "secBurn": None}
 
 
 def research(gp, raw, ids):
@@ -282,7 +315,9 @@ def build(gp, loc_de, loc_en, build_name, icons_dir=None):
 # Modifikatoren, die die Seite auf Werte anwendet (alle anderen erscheinen nur als Text)
 APPLIED = {"GMShotDelay", "GMRotationSpeed", "GMMaxDist", "GMIdealRadius", "SGRudderTime", "visibilityDistCoeff",
            "GTShotDelay", "torpedoSpeedMultiplier", "torpedoRangeCoefficient", "torpedoDamageCoeff", "GSMaxDist",
-           "AAAuraDamage", "healthHullCoeff", "GMAPDamageCoeff", "GMDamageCoeff", "speedCoef"}
+           "AAAuraDamage", "healthHullCoeff", "GMAPDamageCoeff", "GMDamageCoeff", "speedCoef",
+           "burnTime", "floodTime", "floodChanceFactor", "burnChanceFactorBig", "burnChanceFactorSmall",
+           "GSShotDelay", "regenerationHPSpeed"}
 
 
 # Eigene Texte für wichtige Effekte, für die das Spiel keinen eigenen Text mitliefert
@@ -344,6 +379,7 @@ def module_options(gp, raw, loc_de, loc_en):
             for zk, zl in aura_zones(atba).items():
                 zones.setdefault(zk, []).extend(zl)
             o.update(hs, sec=rnd(sec / 1000, 1) if sec else None, aura=zones,
+                     **(sec_stats(gp, atba) if sec else {"secR": None, "secCal": None, "secBurn": None}),
                      art=comps.get("artillery") or [], tor=comps.get("torpedoes") or [])
         elif key == "artillery":
             o["m"] = {m: raw_gun(gp, w._get(raw, m)) for m in comps.get("artillery") or [] if w._get(raw, m) is not None}
@@ -400,7 +436,9 @@ def consumables(gp, raw, loc_de, loc_en):
             opts.append({"a": name, "type": w.to_plain(w._get(v, "consumableType")),
                          "t": both(loc_de, loc_en, key, name),
                          "n": num(w._get(v, "numConsumables")) if num(w._get(v, "numConsumables")) is not None else (-1 if w.to_plain(w._get(v, "numConsumables")) == -1 else None),
-                         "reload": num(w._get(v, "reloadTime")), "work": num(w._get(v, "workTime"))})
+                         "reload": num(w._get(v, "reloadTime")), "work": num(w._get(v, "workTime")),
+                         # Reparaturmannschaft: Anteil der maximalen TP pro Sekunde
+                         "heal": num(w._get(w._get(v, "logic"), "regenerationHPSpeed")) or None})
         if opts:
             out.append(opts)
     return out

@@ -205,6 +205,7 @@ const AA_ZONES = ["far", "medium", "near"];
 const aaZone = (z) => (s) => (s.p.aa && s.p.aa[z] ? s.p.aa[z][1] : null);
 const aaRange = (z) => (s) => (s.p.aa && s.p.aa[z] ? s.p.aa[z][0] : null);
 // [Text, Wert, Anzeige, Richtung (1 = mehr ist besser, -1 = weniger, 0 = nicht vergleichen)]
+const PP_ROWS = new Set(["r.burn", "r.secBurn", "r.tflood"]);
 const ROWS = [
   ["g.general"],
   ["r.tier", (s) => s.tier, (x) => ROMAN[x], 0],
@@ -218,6 +219,8 @@ const ROWS = [
   ["r.rudder", (s) => v(s.p.rudder), (x) => t("u.s", { v: fmt1.format(x) }), -1],
   ["r.seen", (s) => v(s.p.seen), (x) => t("u.km", { v: fmt2.format(x) }), -1],
   ["r.air", (s) => v(s.p.air), (x) => t("u.km", { v: fmt2.format(x) }), -1],
+  ["r.fireT", (s) => v(s.p.fireT), (x) => t("u.s", { v: fmt1.format(x) }), -1],
+  ["r.floodT", (s) => v(s.p.floodT), (x) => t("u.s", { v: fmt1.format(x) }), -1],
   ["g.guns"],
   ["r.gun", (s) => (gun(s) ? t("v.gun", { n: gun(s).barrels, c: gun(s).caliber }) : null), null, 0],
   ["r.reload", (s) => (gun(s) ? gun(s).reload : null), (x) => t("u.s", { v: fmt2.format(x) }), -1],
@@ -239,6 +242,7 @@ const ROWS = [
   ["r.tdmg", (s) => (torp(s) ? torp(s).dmg : null), (x) => fmt.format(x), 1],
   ["r.tspeed", (s) => (torp(s) ? torp(s).speed : null), (x) => t("u.kn", { v: fmt.format(x) }), 1],
   ["r.tseen", (s) => (torp(s) ? torp(s).seen : null), (x) => t("u.km", { v: fmt2.format(x) }), -1],
+  ["r.tflood", (s) => (torp(s) && torp(s).flood ? torp(s).flood : null), (x) => t("u.pct", { v: fmt.format(x) }), 1],
   ["g.aa"],
   ["r.aa0", aaZone("far"), (x) => t("u.dps", { v: fmt.format(x) }), 1],
   ["r.aa0r", aaRange("far"), (x) => t("u.km", { v: fmt1.format(x) }), 1],
@@ -246,7 +250,9 @@ const ROWS = [
   ["r.aa1r", aaRange("medium"), (x) => t("u.km", { v: fmt1.format(x) }), 1],
   ["r.aa2", aaZone("near"), (x) => t("u.dps", { v: fmt.format(x) }), 1],
   ["r.aa2r", aaRange("near"), (x) => t("u.km", { v: fmt1.format(x) }), 1],
-  ["r.sec", (s) => v(s.p.sec), (x) => t("u.km", { v: fmt1.format(x) }), 1]
+  ["r.sec", (s) => v(s.p.sec), (x) => t("u.km", { v: fmt1.format(x) }), 1],
+  ["r.secR", (s) => v(s.p.secR), (x) => t("u.s", { v: fmt2.format(x) }), -1],
+  ["r.secBurn", (s) => v(s.p.secBurn), (x) => t("u.pct", { v: fmt1.format(x) }), 1]
 ];
 
 function addCompare(id) {
@@ -477,20 +483,21 @@ function renderBuildStats(s, sb, def) {
     if (only && !changed) continue;
     if (!changed) { groupRows += `<tr><th scope="row">${esc(t(key))}</th><td class="num">${esc(txt(a))}</td><td class="num">${esc(txt(b))}</td><td></td></tr>`; continue; }
     const better = (b > a) === (dir > 0), cls = better ? "up" : "down";
+    // Chancen (Angaben in %): Änderung in Prozentpunkten, sonst relativ
     const pct = a ? ((b - a) / a) * 100 : 0;
-    const pctTxt = `${pct > 0 ? "+" : "−"}${fmt1.format(Math.abs(pct))} %`;
+    const pctTxt = PP_ROWS.has(key) ? t("u.pp", { v: `${b > a ? "+" : "−"}${fmt1.format(Math.abs(b - a))}` }) : `${pct > 0 ? "+" : "−"}${fmt1.format(Math.abs(pct))} %`;
     groupRows += `<tr class="changed"><th scope="row">${esc(t(key))}</th><td class="num">${esc(txt(a))}</td><td class="num ${cls}">${esc(txt(b))}</td>
       <td class="num"><span class="delta ${cls}">${better ? "▲" : "▼"} ${esc(pctTxt)}</span><span class="visually-hidden"> (${esc(t(better ? "b.better" : "b.worse"))})</span></td></tr>`;
     dock += `<span class="dock-item ${cls}">${esc(t(key))}: ${esc(txt(b))} <b>${esc(pctTxt)}</b></span>`;
   }
   flush();
   // Verbrauchsmaterial: Ladungen (mehr ist besser), Dauer (länger ist besser), Ladezeit (kürzer ist besser)
-  const cb = computeConsumables(sb, build.cs, [], s.type), cc = computeConsumables(sb, build.cs, chosenMods(s), s.type);
+  const cb = computeConsumables(sb, build.cs, [], s.type, base.p.hp), cc = computeConsumables(sb, build.cs, chosenMods(s), s.type, cur.p.hp);
   group = `<tr class="grp"><th scope="colgroup" colspan="4">${esc(t("b.consumables"))}</th></tr>`;
   const charges = (n) => (n === -1 ? "∞" : n === null || n === undefined ? null : fmt.format(n));
   cc.forEach((c, i) => {
     const b0 = cb[i];
-    for (const [k, dir, fmtv] of [["n", 1, charges], ["work", 1, (x) => t("u.s", { v: fmt1.format(x) })], ["reload", -1, (x) => t("u.s", { v: fmt1.format(x) })]]) {
+    for (const [k, dir, fmtv] of [["n", 1, charges], ["work", 1, (x) => t("u.s", { v: fmt1.format(x) })], ["reload", -1, (x) => t("u.s", { v: fmt1.format(x) })], ["heal", 1, (x) => t("u.hps", { v: fmt.format(x) })]]) {
       const a = b0[k], b = c[k];
       if ((a === null || a === undefined) && (b === null || b === undefined)) continue;
       const label = `${L(c.t)}: ${t("b.c." + k)}`;
@@ -513,11 +520,13 @@ function renderBuildStats(s, sb, def) {
 
 // Verbrauchsmaterial: Werte einer Variante ohne und mit Build.
 // dir: 1 = mehr ist besser (Ladungen, Wirkdauer), -1 = weniger ist besser (Ladezeit)
-const CONS_VALUES = [["n", 1], ["work", 1], ["reload", -1]];
+const CONS_VALUES = [["n", 1], ["work", 1], ["reload", -1], ["heal", 1]];
 function consRows(s, slot, opt) {
   const sb = BUILD.ships[s.id], ch = build.cs.slice();
   ch[slot] = opt;
-  const a = computeConsumables(sb, ch, [], s.type)[slot], b = computeConsumables(sb, ch, chosenMods(s), s.type)[slot];
+  const mods = chosenMods(s);
+  const hp0 = computeBuild(sb, build.sel, [], s.type).hp, hp1 = computeBuild(sb, build.sel, mods, s.type).hp;
+  const a = computeConsumables(sb, ch, [], s.type, hp0)[slot], b = computeConsumables(sb, ch, mods, s.type, hp1)[slot];
   const out = [];
   for (const [k, dir] of CONS_VALUES) {
     const x = a[k], y = b[k];
@@ -527,7 +536,7 @@ function consRows(s, slot, opt) {
   }
   return out;
 }
-const consVal = (k, v) => (k === "n" ? (v === -1 ? "∞" : v === null || v === undefined ? "–" : fmt.format(v)) : v === null || v === undefined ? "–" : t("u.s", { v: fmt1.format(v) }));
+const consVal = (k, v) => (v === null || v === undefined ? "–" : k === "n" ? (v === -1 ? "∞" : fmt.format(v)) : k === "heal" ? t("u.hps", { v: fmt.format(v) }) : t("u.s", { v: fmt1.format(v) }));
 const consDelta = (r) => (r.k === "n" ? `${r.b > r.a ? "+" : "−"}${fmt.format(Math.abs(r.b - r.a))}` : `${r.b > r.a ? "+" : "−"}${fmt1.format(Math.abs(((r.b - r.a) / r.a) * 100))} %`);
 // Gesamtrichtung für die Markierung am Icon: nur besser, nur schlechter oder gemischt
 function consTrend(rows) {

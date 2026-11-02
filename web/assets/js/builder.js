@@ -40,6 +40,24 @@ function factor(mods, key, species) {
   return f;
 }
 
+// Zuschläge (z. B. +1 % Brandchance) werden addiert statt multipliziert
+function addend(mods, key, species) {
+  let sum = 0;
+  for (const m of mods) {
+    const v = m && m[key];
+    const x = typeof v === "object" && v !== null ? v[species] : v;
+    if (typeof x === "number") sum += x;
+  }
+  return sum;
+}
+// Brandchance in Prozent: Spiel unterscheidet Granaten über 160 mm (Big) und bis 160 mm (Small)
+const BURN_BIG_MM = 160;
+function burnWith(burn, caliber, mods, species) {
+  if (burn === null || burn === undefined) return null;
+  const add = addend(mods, caliber > BURN_BIG_MM ? "burnChanceFactorBig" : "burnChanceFactorSmall", species);
+  return r(burn + add * 100, 1);
+}
+
 const r = (x, n) => (x === null || x === undefined ? null : Math.round(x * 10 ** n) / 10 ** n);
 
 // Flak-Zonen zusammenführen: größte Reichweite, Summe der DPS, höchste Trefferchance
@@ -55,7 +73,8 @@ function mergeAura(lists, dpsCoef) {
 }
 
 function computeBuild(sb, sel, mods, species) {
-  const F = (key) => factor(mods || [], key, species);
+  mods = mods || [];
+  const F = (key) => factor(mods, key, species);
   const hull = option(sb, "hull", sel.hull);
   const art = pickModule(option(sb, "artillery", sel.artillery), hull && hull.art);
   const tor = pickModule(option(sb, "torpedoes", sel.torpedoes), hull && hull.tor);
@@ -69,7 +88,11 @@ function computeBuild(sb, sel, mods, species) {
     seen: hull && hull.seen !== null ? r(hull.seen * F("visibilityDistCoeff"), 2) : null,
     air: hull && hull.air !== null ? r(hull.air * F("visibilityDistCoeff"), 2) : null,
     gun: null, torp: null, aa: null,
-    sec: hull && hull.sec ? r(hull.sec * F("GSMaxDist"), 1) : null
+    fireT: hull && hull.fireT ? r(hull.fireT * F("burnTime"), 1) : null,
+    floodT: hull && hull.floodT ? r(hull.floodT * F("floodTime"), 1) : null,
+    sec: hull && hull.sec ? r(hull.sec * F("GSMaxDist"), 1) : null,
+    secR: hull && hull.secR ? r(hull.secR * F("GSShotDelay"), 2) : null,
+    secBurn: hull && hull.secBurn ? burnWith(hull.secBurn, hull.secCal, mods, species) : null
   };
   if (art) {
     const rangeM = art.rangeM ? art.rangeM * (fc ? fc.distCoef : 1) * F("GMMaxDist") : null;
@@ -83,7 +106,8 @@ function computeBuild(sb, sel, mods, species) {
       reload: art.reload !== null ? r(art.reload * F("GMShotDelay"), 2) : null,
       range: rangeM ? r(rangeM / 1000, 2) : null,
       turn180: rot ? r(180 / rot, 1) : null,
-      disp, he: shell(art.he), ap: shell(art.ap, F("GMAPDamageCoeff")), sap: shell(art.sap)
+      disp, he: art.he ? { ...shell(art.he), burn: burnWith(art.he.burn, art.caliber, mods, species) } : null,
+      ap: shell(art.ap, F("GMAPDamageCoeff")), sap: shell(art.sap)
     };
   }
   if (tor) {
@@ -92,7 +116,8 @@ function computeBuild(sb, sel, mods, species) {
       reload: tor.reload !== null ? r(tor.reload * F("GTShotDelay"), 1) : null,
       range: tor.range !== null ? r(tor.range * F("torpedoRangeCoefficient"), 1) : null,
       dmg: tor.dmg !== null ? Math.round(tor.dmg * F("torpedoDamageCoeff")) : null,
-      speed: tor.speed !== null ? r(tor.speed * F("torpedoSpeedMultiplier"), 1) : null
+      speed: tor.speed !== null ? r(tor.speed * F("torpedoSpeedMultiplier"), 1) : null,
+      flood: tor.flood ? Math.round(tor.flood * F("floodChanceFactor")) : null
     };
   }
   p.aa = mergeAura([hull && hull.aura, art && art.aura], F("AAAuraDamage"));
@@ -101,17 +126,9 @@ function computeBuild(sb, sel, mods, species) {
 
 // Verbrauchsmaterial: gewählte Variante je Slot mit Ladungen, Ladezeit, Wirkdauer nach Modifikatoren.
 // Ladezeit und Dauer: Faktoren (allgemein und je Art), Ladungen: Zuschläge; -1 = unbegrenzt.
-function computeConsumables(sb, choice, mods, species) {
+function computeConsumables(sb, choice, mods, species, hp) {
   const F = (key) => factor(mods || [], key, species);
-  const A = (key) => {
-    let sum = 0;
-    for (const m of mods || []) {
-      const v = m && m[key];
-      const x = typeof v === "object" && v !== null ? v[species] : v;
-      if (typeof x === "number") sum += x;
-    }
-    return sum;
-  };
+  const A = (key) => addend(mods || [], key, species);
   return (sb.c || []).map((opts, slot) => {
     const c = opts[(choice && choice[slot]) || 0] || opts[0];
     const ty = c.type || "";
@@ -119,7 +136,8 @@ function computeConsumables(sb, choice, mods, species) {
       a: c.a, t: c.t, type: ty,
       n: typeof c.n === "number" && c.n > 0 ? c.n + A("additionalConsumables") + A(ty + "AdditionalConsumables") : c.n,
       reload: c.reload !== null ? r(c.reload * F("ConsumableReloadTime") * F(ty + "ReloadCoeff"), 1) : null,
-      work: c.work !== null ? r(c.work * F("ConsumablesWorkTime") * F(ty + "WorkTimeCoeff"), 1) : null
+      work: c.work !== null ? r(c.work * F("ConsumablesWorkTime") * F(ty + "WorkTimeCoeff"), 1) : null,
+      heal: c.heal && hp ? Math.round(c.heal * F("regenerationHPSpeed") * hp) : null
     };
   });
 }
